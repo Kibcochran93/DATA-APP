@@ -307,10 +307,30 @@ def main() -> None:
             st.session_state.redis_connected = check_redis_connection()
             st.session_state.redis_checked = True
         
+        # Check for test mode (bypass authentication for development)
+        test_mode = os.getenv('TEST_MODE', 'false').lower() == 'true'
+        
         # Check authentication
-        if not check_auth():
-            render_login()
+        if not test_mode and not check_auth():
+            # Handle login
+            credentials = render_login()
+            if credentials:
+                try:
+                    if st.session_state.auth:
+                        token = st.session_state.auth.authenticate(
+                            credentials['username'], 
+                            credentials['password']
+                        )
+                        st.session_state.token = token
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Login failed: {str(e)}")
             return
+        
+        # Set test user if in test mode
+        if test_mode and st.session_state.user is None:
+            st.session_state.user = {'username': 'test_user', 'role': 'admin'}
+            st.session_state.token = 'test_token'
         
         # Main application logic
         st.title("SEATS Data Validation")
