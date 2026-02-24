@@ -186,28 +186,98 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
         st.error("No data loaded. Please go back to upload.")
         return
     
-    st.info("Map your column headers to the expected fields.")
+    st.info("Map your column headers to the expected SEATS fields.")
     
-    # Get expected headers for dataset type
+    # Get expected headers from SEATS spec
     try:
-        from utils.master_spec_loader import MasterSpecLoader
-        loader = MasterSpecLoader()
-        expected = loader.get_expected_headers(dataset_type)
-    except Exception:
-        expected = {"mandatory": [], "optional": []}
+        from utils.seats_data_handler import load_spec_by_type
+        spec = load_spec_by_type(dataset_type)
+        
+        mandatory_fields = spec.get('mandatory_fields', [])
+        all_fields = list(spec.get('fields', {}).keys())
+        optional_fields = [f for f in all_fields if f not in mandatory_fields]
+        
+        expected = {
+            "mandatory": mandatory_fields,
+            "optional": optional_fields
+        }
+        
+        # Show spec info
+        st.markdown(f"**Dataset:** {spec.get('dataset_type', dataset_type)} v{spec.get('version', '?')}")
+        st.markdown(f"**Required fields:** {len(mandatory_fields)} | **Optional fields:** {len(optional_fields)}")
+        
+    except ValueError:
+        # Fallback if spec not found
+        try:
+            from utils.master_spec_loader import MasterSpecLoader
+            loader = MasterSpecLoader()
+            expected = loader.get_expected_headers(dataset_type)
+        except Exception:
+            expected = {"mandatory": [], "optional": []}
     
     current_headers = df.columns.tolist()
     all_expected = expected.get("mandatory", []) + expected.get("optional", [])
     
+    # Show current columns vs expected
+    st.markdown("### Column Mapping")
+    
+    # Auto-suggest mappings
+    file_cols_set = set(current_headers)
+    auto_suggestions = _suggest_column_mappings(file_cols_set, expected.get("mandatory", []))
+    
+    if auto_suggestions:
+        st.warning("⚠️ Some columns may need renaming. Suggested mappings:")
+        for file_col, spec_col in auto_suggestions.items():
+            st.markdown(f"- `{file_col}` → **{spec_col}**")
+    
+    # Check for already matching columns
+    matching = [col for col in current_headers if col in all_expected]
+    missing_mandatory = [f for f in expected.get("mandatory", []) if f not in current_headers]
+    
+    if matching:
+        st.success(f"✓ {len(matching)} columns already match spec names")
+    
+    if missing_mandatory:
+        st.error(f"✗ {len(missing_mandatory)} mandatory columns missing: {', '.join(missing_mandatory[:5])}{'...' if len(missing_mandatory) > 5 else ''}")
+    
+    # Column mapping interface
+    st.markdown("---")
+    st.markdown("**Map each column to a SEATS field (or ignore):**")
+    
     mapping = {}
-    for col in current_headers:
-        selected = st.selectbox(
-            f"Map '{col}' to:",
-            options=["(ignore)"] + all_expected,
-            key=f"map_{col}"
-        )
-        if selected != "(ignore)":
-            mapping[col] = selected
+    
+    # Group columns: exact matches, suggested mappings, others
+    cols_with_suggestions = list(auto_suggestions.keys())
+    cols_exact_match = [c for c in current_headers if c in all_expected]
+    cols_other = [c for c in current_headers if c not in cols_exact_match and c not in cols_with_suggestions]
+    
+    # Show suggested mappings first
+    if cols_with_suggestions:
+        st.markdown("**Columns needing attention:**")
+        for col in cols_with_suggestions:
+            suggested = auto_suggestions.get(col, "(ignore)")
+            default_idx = all_expected.index(suggested) + 1 if suggested in all_expected else 0
+            selected = st.selectbox(
+                f"'{col}' →",
+                options=["(ignore)"] + all_expected,
+                index=default_idx,
+                key=f"map_{col}"
+            )
+            if selected != "(ignore)":
+                mapping[col] = selected
+    
+    # Show other columns in expander
+    with st.expander(f"Other columns ({len(cols_exact_match) + len(cols_other)})"):
+        for col in cols_exact_match + cols_other:
+            default_idx = all_expected.index(col) + 1 if col in all_expected else 0
+            selected = st.selectbox(
+                f"'{col}' →",
+                options=["(ignore)"] + all_expected,
+                index=default_idx,
+                key=f"map_{col}"
+            )
+            if selected != "(ignore)":
+                mapping[col] = selected
     
     wizard_state.set_data("header_mapping", mapping)
     
@@ -344,24 +414,56 @@ def _suggest_column_mappings(file_cols: set, missing_cols: list) -> dict:
     """Suggest column mappings based on common naming patterns."""
     suggestions = {}
     
-    # Common naming variations
+    # Common naming variations for all dataset types
     mapping_patterns = {
-        'COURSE_ID': ['PROGRAM_ID', 'PROGRAMME_ID', 'PROG_ID'],
+        # Timetable mappings
+        'COURSE_ID': ['PROGRAM_ID', 'PROGRAMME_ID', 'PROG_ID', 'COURSE_CODE'],
         'COURSE_NAME': ['PROGRAM_NAME', 'PROGRAMME_NAME', 'PROG_NAME'],
-        'MODULE_ID': ['CLASS_ID', 'SUBJECT_ID', 'UNIT_ID'],
+        'MODULE_ID': ['CLASS_ID', 'SUBJECT_ID', 'UNIT_ID', 'MODULE_CODE'],
         'MODULE_NAME': ['CLASS_NAME', 'SUBJECT_NAME', 'UNIT_NAME'],
-        'SCHOOL_ID': ['DEPARTMENT_ID', 'DEPT_ID', 'FACULTY_ID'],
+        'SCHOOL_ID': ['DEPARTMENT_ID', 'DEPT_ID', 'FACULTY_ID', 'SCHOOL_CODE'],
         'SCHOOL_NAME': ['DEPARTMENT_NAME', 'DEPT_NAME', 'FACULTY_NAME'],
-        'STUDENT_ID': ['STUDENTID', 'STU_ID', 'STUDENT_NUMBER'],
-        'EVENT_ID': ['EVENTID', 'TIMETABLE_ID', 'SCHEDULE_ID', 'LECTURE_ID'],
-        'STAFF_NUMBER': ['STAFF_ID', 'STAFFID', 'EMPLOYEE_ID'],
+        'EVENT_ID': ['EVENTID', 'TIMETABLE_ID', 'SCHEDULE_ID', 'LECTURE_ID', 'CLASS_ID'],
+        
+        # Student mappings
+        'STUDENT_ID': ['STUDENTID', 'STU_ID', 'STUDENT_NUMBER', 'STUDENT_CODE', 'ID'],
+        'STUDENT_FORENAME': ['FORENAME', 'FIRST_NAME', 'FIRSTNAME', 'GIVEN_NAME'],
+        'STUDENT_LAST_NAME': ['LAST_NAME', 'LASTNAME', 'SURNAME', 'FAMILY_NAME'],
+        'STUDENT_EMAIL': ['EMAIL', 'PERSONAL_EMAIL', 'STU_EMAIL'],
+        'UNIVERSITY_EMAIL': ['UNI_EMAIL', 'INSTITUTIONAL_EMAIL', 'COLLEGE_EMAIL'],
+        'STUDENT_LOGIN_ID': ['LOGIN_ID', 'USERNAME', 'USER_ID', 'SSO_ID'],
+        'STUDENT_TELEPHONE': ['TELEPHONE', 'PHONE', 'MOBILE', 'CONTACT_NUMBER'],
+        'DATE_OF_BIRTH': ['DOB', 'BIRTHDATE', 'BIRTH_DATE'],
+        'VISAREQUIRED': ['VISA_REQUIRED', 'IS_TIER4', 'TIER4', 'INTERNATIONAL'],
+        'BADGE_NUMBER': ['BADGE_ID', 'CARD_NUMBER', 'CARD_ID'],
+        'CTY_NATIONALITY': ['NATIONALITY', 'COUNTRY_NATIONALITY'],
+        'CTY_DOMICILE': ['DOMICILE', 'HOME_COUNTRY', 'COUNTRY_DOMICILE'],
+        'CTY_BIRTH': ['COUNTRY_OF_BIRTH', 'BIRTH_COUNTRY'],
+        'STUDENT_MOA': ['MODE_OF_ATTENDANCE', 'ATTENDANCE_MODE', 'MOA'],
+        'STUDENT_STATUS': ['STATUS', 'ENROLMENT_STATUS', 'ENROLLMENT_STATUS'],
+        'ADMIN_AREA': ['EDUCATION_LEVEL', 'LEVEL', 'STUDY_LEVEL'],
+        'FEE_CATEGORY': ['FEE_STATUS', 'FEE_TYPE'],
+        
+        # Staff mappings
+        'STAFF_NUMBER': ['STAFF_ID', 'STAFFID', 'EMPLOYEE_ID', 'EMP_ID', 'STAFF_CODE'],
+        'FORENAME': ['FIRST_NAME', 'FIRSTNAME', 'GIVEN_NAME'],
+        'LAST_NAME': ['LASTNAME', 'SURNAME', 'FAMILY_NAME'],
+        'STAFF_TYPE': ['STAFFTYPE', 'ROLE', 'JOB_TYPE', 'POSITION'],
+        'LOGIN_ID': ['USERNAME', 'USER_ID', 'SSO_ID', 'STAFF_LOGIN'],
+        'EMAIL': ['PERSONAL_EMAIL', 'STAFF_EMAIL'],
+        'TELEPHONE': ['PHONE', 'MOBILE', 'CONTACT_NUMBER'],
+        'EXTERNAL_KEY': ['EXTERNAL_ID', 'EXT_KEY', 'ACCESS_PROFILE_KEY'],
     }
     
     for missing_col in missing_cols:
         if missing_col in mapping_patterns:
             for pattern in mapping_patterns[missing_col]:
-                if pattern in file_cols:
-                    suggestions[pattern] = missing_col
+                # Check case-insensitive
+                for file_col in file_cols:
+                    if file_col.upper() == pattern.upper():
+                        suggestions[file_col] = missing_col
+                        break
+                if missing_col in [v for v in suggestions.values()]:
                     break
     
     return suggestions
