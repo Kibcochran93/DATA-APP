@@ -927,12 +927,19 @@ def load_timetable_spec() -> Dict[str, Any]:
     return get_seats_handler().load_spec(spec_path)
 
 
+def load_staff_spec() -> Dict[str, Any]:
+    """Load the Staff Data master spec."""
+    from config.config import SEATS_SPEC_PATH
+    spec_path = Path(SEATS_SPEC_PATH) / 'staff_data_spec.json'
+    return get_seats_handler().load_spec(spec_path)
+
+
 def load_spec_by_type(dataset_type: str) -> Dict[str, Any]:
     """
     Load a master spec by dataset type.
     
     Args:
-        dataset_type: Type of dataset (Student, StudentTimetable, etc.)
+        dataset_type: Type of dataset (Student, StudentTimetable, Staff, etc.)
         
     Returns:
         Master spec dictionary
@@ -945,6 +952,8 @@ def load_spec_by_type(dataset_type: str) -> Dict[str, Any]:
         'studentdata': 'student_data_spec.json',
         'timetable': 'student_timetable_spec.json',
         'studenttimetable': 'student_timetable_spec.json',
+        'staff': 'staff_data_spec.json',
+        'staffdata': 'staff_data_spec.json',
     }
     
     normalized_type = dataset_type.lower().replace('_', '').replace(' ', '')
@@ -966,6 +975,7 @@ __all__ = [
     'get_seats_handler',
     'load_student_spec',
     'load_timetable_spec',
+    'load_staff_spec',
     'load_spec_by_type',
     'MultiValueField',
     'CrossFileValidationResult',

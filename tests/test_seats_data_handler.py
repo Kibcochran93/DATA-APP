@@ -24,6 +24,7 @@ from utils.seats_data_handler import (
     FORWARD_SLASH_MULTI_VALUE_FIELDS,
     PIPE_MULTI_VALUE_FIELDS,
     load_timetable_spec,
+    load_staff_spec,
     load_spec_by_type,
 )
 
@@ -597,3 +598,136 @@ class TestLoadSpecByType:
             load_spec_by_type('InvalidType')
         
         assert 'Unknown dataset type' in str(exc_info.value)
+
+
+class TestStaffSpec:
+    """Tests for Staff Data specification loading and validation."""
+    
+    def test_load_staff_spec(self, handler):
+        """Test that staff spec loads correctly."""
+        spec = load_staff_spec()
+        
+        assert spec is not None
+        assert spec['dataset_type'] == 'Staff'
+        assert spec['version'] == '8.2'
+    
+    def test_staff_spec_has_15_fields(self, handler):
+        """Test that staff spec has all 15 fields."""
+        spec = load_staff_spec()
+        
+        assert len(spec['fields']) == 15
+    
+    def test_staff_mandatory_fields(self, handler):
+        """Test that mandatory fields are correctly specified."""
+        spec = load_staff_spec()
+        
+        expected_mandatory = [
+            'STAFF_NUMBER', 'FORENAME', 'LAST_NAME',
+            'UNIVERSITY_EMAIL', 'LOGIN_ID'
+        ]
+        
+        assert set(spec['mandatory_fields']) == set(expected_mandatory)
+    
+    def test_staff_unique_key(self, handler):
+        """Test that unique key is STAFF_NUMBER."""
+        spec = load_staff_spec()
+        
+        assert spec['unique_key'] == ['STAFF_NUMBER']
+    
+    def test_staff_type_enum_values(self, handler):
+        """Test that STAFF_TYPE has all 23 enum values."""
+        spec = load_staff_spec()
+        
+        staff_type = spec['fields']['STAFF_TYPE']
+        
+        assert staff_type['type'] == 'enum'
+        # 23 types plus empty string
+        assert len(staff_type['values']) == 24
+        assert 'LECTRR' in staff_type['values']  # Lecturer
+        assert 'PRFSRV' in staff_type['values']  # Professional Services
+        assert 'ADMSTA' in staff_type['values']  # Administration Staff
+    
+    def test_staff_type_descriptions(self, handler):
+        """Test that STAFF_TYPE has value descriptions."""
+        spec = load_staff_spec()
+        
+        staff_type = spec['fields']['STAFF_TYPE']
+        
+        assert 'value_descriptions' in staff_type
+        assert staff_type['value_descriptions']['LECTRR'] == 'Lecturer'
+        assert staff_type['value_descriptions']['SENMAN'] == 'Senior Manager'
+    
+    def test_staff_email_fields(self, handler):
+        """Test that email fields are correctly specified."""
+        spec = load_staff_spec()
+        
+        email_fields = spec['validation_rules']['email_fields']
+        
+        assert 'EMAIL' in email_fields
+        assert 'UNIVERSITY_EMAIL' in email_fields
+    
+    def test_staff_preserve_leading_zeros(self, handler):
+        """Test that leading zero fields are specified."""
+        spec = load_staff_spec()
+        
+        leading_zero_fields = spec['validation_rules']['preserve_leading_zeros']
+        
+        assert 'STAFF_NUMBER' in leading_zero_fields
+        assert 'BADGE_NUMBER' in leading_zero_fields
+        assert 'TELEPHONE' in leading_zero_fields
+        assert 'EXTERNAL_KEY' in leading_zero_fields
+    
+    def test_staff_single_type_constraint(self, handler):
+        """Test that single staff type constraint is specified."""
+        spec = load_staff_spec()
+        
+        constraint = spec['validation_rules']['single_value_constraint']
+        
+        assert constraint['field'] == 'STAFF_TYPE'
+        assert 'staff member can only have one' in constraint['description'].lower()
+    
+    def test_validate_staff_data(self, handler):
+        """Test validation against staff spec."""
+        spec = load_staff_spec()
+        
+        valid_df = pd.DataFrame({
+            'STAFF_NUMBER': ['S001', 'S002'],
+            'FORENAME': ['John', 'Jane'],
+            'LAST_NAME': ['Doe', 'Smith'],
+            'UNIVERSITY_EMAIL': ['john.doe@uni.edu', 'jane.smith@uni.edu'],
+            'LOGIN_ID': ['jdoe', 'jsmith'],
+            'STAFF_TYPE': ['LECTRR', 'PRFSRV'],
+        })
+        
+        result = handler.validate_against_spec(valid_df, spec)
+        
+        # Should have no missing mandatory field errors
+        missing_mandatory = [e for e in result['errors'] if e.get('type') == 'missing_mandatory_field']
+        assert len(missing_mandatory) == 0
+    
+    def test_validate_staff_invalid_type(self, handler):
+        """Test validation catches invalid staff type."""
+        spec = load_staff_spec()
+        
+        invalid_df = pd.DataFrame({
+            'STAFF_NUMBER': ['S001'],
+            'FORENAME': ['John'],
+            'LAST_NAME': ['Doe'],
+            'UNIVERSITY_EMAIL': ['john.doe@uni.edu'],
+            'LOGIN_ID': ['jdoe'],
+            'STAFF_TYPE': ['INVALID'],
+        })
+        
+        result = handler.validate_against_spec(invalid_df, spec)
+        
+        # Should detect invalid enum value
+        enum_errors = [e for e in result['errors'] if e.get('type') == 'invalid_enum_value']
+        assert len(enum_errors) > 0
+    
+    def test_load_staff_spec_by_type(self):
+        """Test loading staff spec via load_spec_by_type."""
+        spec = load_spec_by_type('Staff')
+        assert spec['dataset_type'] == 'Staff'
+        
+        spec2 = load_spec_by_type('staff data')
+        assert spec2['dataset_type'] == 'Staff'
