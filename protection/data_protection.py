@@ -13,9 +13,9 @@ import os
 import warnings
 import json
 
-if TYPE_CHECKING:
-    from utils.exceptions import SecurityError, ValidationError
-    from utils.debug_logger import setup_logger, log_exception
+# Runtime imports for exceptions and logging
+from utils.exceptions import SecurityError, ValidationError
+from utils.debug_logger import setup_logger, log_exception
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class DataProtection:
             self._validate_config()
             
         except Exception as e:
-            log_exception(logger, e, "DataProtection.__init__")
+            log_exception(e, logger, action= "DataProtection.__init__")
             raise SecurityError(f"Failed to initialize data protection: {str(e)}")
     
     def _validate_config(self) -> None:
@@ -78,7 +78,7 @@ class DataProtection:
                 raise SecurityError("masking configuration must be a dictionary")
             
         except Exception as e:
-            log_exception(logger, e, "DataProtection._validate_config")
+            log_exception(e, logger, action= "DataProtection._validate_config")
             raise SecurityError(f"Configuration validation failed: {str(e)}")
     
     def _generate_key(self) -> bytes:
@@ -104,7 +104,7 @@ class DataProtection:
             return key
             
         except Exception as e:
-            log_exception(logger, e, "DataProtection._generate_key")
+            log_exception(e, logger, action= "DataProtection._generate_key")
             raise SecurityError(f"Key generation failed: {str(e)}")
     
     def encrypt_data(self, data: Any) -> bytes:
@@ -131,7 +131,7 @@ class DataProtection:
                 return self._encrypt_string(data)
             return self.fernet.encrypt(str(data).encode())
         except Exception as e:
-            log_exception(logger, e, "DataProtection.encrypt_data")
+            log_exception(e, logger, action= "DataProtection.encrypt_data")
             raise SecurityError(f"Encryption failed: {str(e)}")
     
     def decrypt_data(self, encrypted_data: bytes) -> Any:
@@ -150,7 +150,7 @@ class DataProtection:
         try:
             return self.fernet.decrypt(encrypted_data)
         except Exception as e:
-            log_exception(logger, e, "DataProtection.decrypt_data")
+            log_exception(e, logger, action= "DataProtection.decrypt_data")
             raise SecurityError(f"Decryption failed: {str(e)}")
     
     def mask_pii(self, data: Union[pd.DataFrame, Dict, List]) -> Union[pd.DataFrame, Dict, List]:
@@ -177,7 +177,7 @@ class DataProtection:
                 raise SecurityError(f"Unsupported data type: {type(data)}")
                 
         except Exception as e:
-            log_exception(logger, e, "DataProtection.mask_pii")
+            log_exception(e, logger, action= "DataProtection.mask_pii")
             raise SecurityError(f"PII masking failed: {str(e)}")
     
     def _encrypt_dataframe(self, df: pd.DataFrame) -> bytes:
@@ -188,7 +188,7 @@ class DataProtection:
             # Encrypt JSON data
             return self.fernet.encrypt(json_data.encode())
         except Exception as e:
-            log_exception(logger, e, "DataProtection._encrypt_dataframe")
+            log_exception(e, logger, action= "DataProtection._encrypt_dataframe")
             raise SecurityError(f"DataFrame encryption failed: {str(e)}")
     
     def _encrypt_dict(self, d: Dict[str, Any]) -> bytes:
@@ -199,7 +199,7 @@ class DataProtection:
             # Encrypt JSON data
             return self.fernet.encrypt(json_data.encode())
         except Exception as e:
-            log_exception(logger, e, "DataProtection._encrypt_dict")
+            log_exception(e, logger, action= "DataProtection._encrypt_dict")
             raise SecurityError(f"Dictionary encryption failed: {str(e)}")
     
     def _encrypt_list(self, l: List[Any]) -> bytes:
@@ -210,7 +210,7 @@ class DataProtection:
             # Encrypt JSON data
             return self.fernet.encrypt(json_data.encode())
         except Exception as e:
-            log_exception(logger, e, "DataProtection._encrypt_list")
+            log_exception(e, logger, action= "DataProtection._encrypt_list")
             raise SecurityError(f"List encryption failed: {str(e)}")
     
     def _encrypt_string(self, s: str) -> bytes:
@@ -218,7 +218,7 @@ class DataProtection:
         try:
             return self.fernet.encrypt(s.encode())
         except Exception as e:
-            log_exception(logger, e, "DataProtection._encrypt_string")
+            log_exception(e, logger, action= "DataProtection._encrypt_string")
             raise SecurityError(f"String encryption failed: {str(e)}")
     
     def _mask_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -235,7 +235,7 @@ class DataProtection:
             return df_masked
             
         except Exception as e:
-            log_exception(logger, e, "DataProtection._mask_dataframe")
+            log_exception(e, logger, action= "DataProtection._mask_dataframe")
             raise SecurityError(f"DataFrame masking failed: {str(e)}")
     
     def _mask_value(self, value: str) -> str:
@@ -260,7 +260,7 @@ class DataProtection:
             return value
             
         except Exception as e:
-            log_exception(logger, e, "DataProtection._mask_value")
+            log_exception(e, logger, action= "DataProtection._mask_value")
             return value  # Return original value on error
     
     def _mask_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -270,7 +270,7 @@ class DataProtection:
                    for k, v in data.items()}
                    
         except Exception as e:
-            log_exception(logger, e, "DataProtection._mask_dict")
+            log_exception(e, logger, action= "DataProtection._mask_dict")
             raise SecurityError(f"Dictionary masking failed: {str(e)}")
     
     def _mask_list(self, data: List[Any]) -> List[Any]:
@@ -280,7 +280,7 @@ class DataProtection:
                    for item in data]
                    
         except Exception as e:
-            log_exception(logger, e, "DataProtection._mask_list")
+            log_exception(e, logger, action= "DataProtection._mask_list")
             raise SecurityError(f"List masking failed: {str(e)}")
     
     def secure_store(self, data: Any, path: str) -> None:
@@ -309,7 +309,7 @@ class DataProtection:
                 f.write(data_hash)
                 
         except Exception as e:
-            log_exception(logger, e, "DataProtection.secure_store")
+            log_exception(e, logger, action= "DataProtection.secure_store")
             raise SecurityError(f"Secure storage failed: {str(e)}")
     
     def secure_load(self, path: str) -> Any:
@@ -342,5 +342,5 @@ class DataProtection:
             return self.decrypt_data(encrypted_data)
             
         except Exception as e:
-            log_exception(logger, e, "DataProtection.secure_load")
+            log_exception(e, logger, action= "DataProtection.secure_load")
             raise SecurityError(f"Secure loading failed: {str(e)}") 
