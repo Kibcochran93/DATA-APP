@@ -28,17 +28,16 @@ def exporter(temp_export_dir):
         'formats': {
             'csv': {
                 'encoding': 'utf-8',
-                'delimiter': ',',
-                'quotechar': '"',
-                'escapechar': '\\'
+                'sep': ',',
+                'index': False
             },
             'excel': {
                 'engine': 'openpyxl',
-                'sheet_name': 'Sheet1'
+                'sheet_name': 'Sheet1',
+                'index': False
             },
             'json': {
-                'indent': 2,
-                'ensure_ascii': False
+                'indent': 2
             }
         }
     }

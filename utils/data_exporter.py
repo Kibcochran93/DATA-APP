@@ -22,7 +22,14 @@ class DataExporter:
 
         # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"export_{timestamp}.{format_type}"
+        # Map format type to file extension
+        extension_map = {
+            'csv': 'csv',
+            'excel': 'xlsx',
+            'json': 'json'
+        }
+        ext = extension_map.get(format_type, format_type)
+        filename = f"export_{timestamp}.{ext}"
         filepath = os.path.join(self.export_dir, filename)
 
         try:
