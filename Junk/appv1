@@ -1,0 +1,114 @@
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+from dataset_specs import expected_headers
+from dataset_logic import (
+    validate_missing_fields,
+    get_unexpected_fields,
+    check_referential_integrity,
+    auto_fix_fields,
+    validate_field_formats,
+)
+from ui_components import (
+    section_header,
+    render_header_mapping,
+    render_field_validation_summary,
+    render_mapping_summary,
+    render_data_editor,
+    render_row_format_hint,
+)
+
+# --- Streamlit App Configuration ---
+st.set_page_config(page_title="SEAtS Data Validator", layout="wide")
+st.title("📚 SEAtS Full Dataset Integrity Validator")
+st.markdown("---")
+
+# --- Sidebar: Mode Toggle and Reference Uploads ---
+full_mode = st.sidebar.toggle("🔧 Enable Full Mode (Advanced Validation)", value=True)
+st.session_state["full_mode"] = full_mode
+
+current_dataset = st.session_state.get("current_tab", list(expected_headers.keys())[0])
+
+# --- Tabs for All Dataset Types ---
+dataset_types = list(expected_headers.keys())
+tabs = st.tabs(dataset_types)
+
+for tab, dataset_type in zip(tabs, dataset_types):
+    with tab:
+        st.session_state["current_tab"] = dataset_type
+        section_header(f"Upload {dataset_type} CSV")
+
+        # --- Sidebar Help ---
+        st.sidebar.subheader(f"📘 {dataset_type} Field Guide")
+        with st.sidebar.expander("Field Definitions", expanded=False):
+            st.markdown("**✅ Mandatory Fields**")
+            for field in expected_headers[dataset_type]["mandatory"]:
+                st.markdown(f"- `{field}`")
+            st.markdown("**🟡 Optional Fields**")
+            for field in expected_headers[dataset_type].get("optional", []):
+                st.markdown(f"- `{field}`")
+
+        file = st.file_uploader("", type="csv", key=f"file_{dataset_type}")
+
+        reference_files = {}
+        st.sidebar.subheader(f"📁 {dataset_type} References")
+        for ref in expected_headers:
+            reference_files[ref] = st.sidebar.file_uploader(
+                f"Reference: {ref}", type="csv", key=f"ref_{dataset_type}_{ref}"
+            )
+
+        dataframes = {}
+
+        if file:
+            df = pd.read_csv(file)
+
+            # Normalize headers BEFORE auto-fix
+            df.columns = [h.strip().upper().replace(" ", "_") for h in df.columns]
+
+            df_original = df.copy()
+            df = auto_fix_fields(df, dataset_type)
+
+            # Drop columns not in spec
+            valid_fields = expected_headers[dataset_type]["mandatory"] + expected_headers[dataset_type].get("optional", [])
+            df = df[[col for col in df.columns if col in valid_fields]]
+
+            # Track auto-fix changes
+            import numpy as np
+            changes = (df_original != df) & ~(df_original.isna() & df.isna())
+            changed_fields = df.columns[changes.any(axis=0)].tolist()
+            changed_rows = df.index[changes.any(axis=1)].tolist()
+
+            if changed_fields:
+                with st.expander("⚙️ Auto-Fix Summary", expanded=False):
+                    st.success(f"✅ {len(changed_rows)} rows auto-corrected across {len(changed_fields)} field(s).")
+                    for field in changed_fields:
+                        affected = df.index[changes[field]].tolist()
+                        st.markdown(f"- **{field}** → rows: {affected}")
+
+            raw_headers = df.columns.tolist()
+            normalized_headers = df.columns.tolist()  # already normalized
+
+            # --- Step 1: Validation Mode Selection ---
+            correction_mode = st.radio(
+                "Choose Validation Mode:",
+                ["Header Mapping", "Row Format Validation"],
+                horizontal=True,
+                key=f"correction_mode_{dataset_type}"
+            )
+
+            if correction_mode == "Header Mapping":
+                with st.expander("🔄 Header Mapping", expanded=False):
+                    mandatory = expected_headers[dataset_type]["mandatory"]
+                    optional = expected_headers[dataset_type].get("optional", [])
+                    options = mandatory + optional
+
+                    new_headers = render_header_mapping(raw_headers, normalized_headers, dataset_type, options)
+                    df.columns = new_headers
+
+                    missing = validate_missing_fields(df, dataset_type)
+                    unexpected = get_unexpected_fields(df, dataset_type)
+                    render_mapping_summary(
+                        mapped=len(new_headers) - new_headers.count("(ignore)"),
+                        ignored=new_headers.count("(ignore)"),
+                        missing=missing
+                    )

@@ -1,0 +1,37 @@
+{
+  "name": "SEAtS IGNITE Mapper",
+  "rules": [
+    {
+      "name": "Enforce Feature Scope Guard",
+      "trigger": "pre-commit",
+      "description": "Block new feature modules unless defined in FEATURE_SCOPE.json",
+      "script": "python tools/enforce_scope_guard.py"
+    },
+    {
+      "name": "Validate Dataset Specs on Save",
+      "trigger": "on-save",
+      "path": "dataset_specs.py",
+      "description": "Run schema lint on dataset specs",
+      "command": "python tools/validate_specs.py"
+    },
+    {
+      "name": "Require Tests for Logic Changes",
+      "trigger": "pre-merge",
+      "paths": ["dataset_logic.py", "dataset_specs.py"],
+      "description": "Ensure unit test exists for new validators",
+      "script": "python tools/check_tests_for_logic.py"
+    },
+    {
+      "name": "AI Review Summary Required",
+      "trigger": "pre-merge",
+      "description": "Prompt AI to summarize the diff and attach to PR description",
+      "command": "cursor summarize-diff"
+    },
+    {
+      "name": "Require Done Checklist",
+      "trigger": "pre-merge",
+      "description": "Check 'Definition of Done' for validators is met",
+      "script": "python tools/check_done_checklist.py"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+﻿Column Title,Column Description,Mandatory,Validation,Column Format,Client Supplied,Source database,Source table,Source field,Notes,Unnamed: 10
+1. TAG_NAME,Tag Name or Description (will be shown as a filter in Students page).,Y,,Text (max 300),,,,,,

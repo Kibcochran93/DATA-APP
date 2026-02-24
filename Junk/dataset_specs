@@ -1,0 +1,116 @@
+expected_headers = {
+    "Student": {
+        "mandatory": [
+            "STUDENT_ID", "STUDENT_FORENAME", "STUDENT_LAST_NAME", "VISAREQUIRED",
+            "COURSE_ID", "COURSE_NAME", "MODULE_ID", "MODULE_NAME",
+            "SCHOOL_NAME", "SCHOOL_ID", "STUDENT_LOGIN_ID"
+        ],
+        "optional": [
+            "COHORT_START", "COHORT_END", "STUDENT_EMAIL", "UNIVERSITY_EMAIL",
+            "STUDENT_TELEPHONE", "STUDENT_STATUS", "STUDENT_MOA",
+            "ADDRESS_1", "ADDRESS_2", "ADDRESS_3", "ADDRESS_4", "ADDRESS_5",
+            "TUTOR_EMAIL", "EXPIRE_DATE", "COLLEGE_YEAR"
+        ]
+    },
+    "Timetable": {
+        "mandatory": [
+            "EVENT_ID", "DAY", "START_TIME", "END_TIME", "ROOM_ID", "ROOM_NAME",
+            "COURSE_ID", "COURSE_NAME", "MODULE_ID", "MODULE_NAME",
+            "SCHOOL_ID", "SCHOOL_NAME", "STUDENT_ID"
+        ],
+        "optional": [
+            "COURSE_SESSION_CODE", "MODULE_SESSION_CODE", "LESSON_TYPE",
+            "SITE_CODE", "SITE_NAME", "TUTOR_ID", "TUTOR",
+            "LESSON_DESCRIPTION", "BUILDING_ID", "BUILDING_NAME",
+            "GROUP_ID", "GROUP_NAME", "IS_MANDATORY", "ATTENDANCE_STATUS",
+            "CLASSLINK", "DELETE", "VIRTUAL_ATTENDANCE", "MODULE_GROUP"
+        ],
+        "refs": {
+            "STUDENT_ID": "Student",
+            "MODULE_ID": "Student",
+            "COURSE_ID": "Student",
+            "SCHOOL_ID": "Student"
+        }
+    },
+    "Assessments": {
+        "mandatory": ["ASSESSMENT_CODE"],
+        "optional": [
+            "ASSESSMENT_DESCRIPTION", "ASSESSMENT_TYPE", "SCHOOL_ID", "COURSE_ID",
+            "COURSE_SESSION_CODE", "MODULE_ID", "MODULE_SESSION_CODE", "PASSING_GRADE",
+            "DUE_DATE", "APPLY_TO_MODULE", "ASSESSMENT_WEIGHT", "IS_GROUP_ASSESSMENT",
+            "ACADEMIC_YEAR", "SEMESTER_CODE", "STUDENT_YEAR"
+        ],
+        "refs": {
+            "MODULE_SESSION_CODE": "Student",
+            "COURSE_ID": "Student",
+            "SCHOOL_ID": "Student",
+            "MODULE_ID": "Student"
+        }
+    },
+    "Assessment Events": {
+        "mandatory": [
+            "EVENT_CODE", "STUDENT_NUMBER", "ASSESSMENT_CODE",
+            "ASSESSMENT_EVENT_TYPE", "TIMESTAMP"
+        ],
+        "optional": ["VALUE", "COMMENT"],
+        "refs": {
+            "STUDENT_NUMBER": "Student",
+            "ASSESSMENT_CODE": "Assessments"
+        }
+    },
+    "Assessment Results": {
+        "mandatory": ["STUDENT_ID", "ASSESSMENT_CODE", "RESULT"],
+        "optional": ["RESULT_GRADE", "COMMENTS", "RECORDED_DATE"],
+        "refs": {
+            "STUDENT_ID": "Student",
+            "ASSESSMENT_CODE": "Assessments"
+        }
+    },
+    "Attendance": {
+        "mandatory": ["STUDENT_ID", "EVENT_ID", "STATUS"],
+        "optional": ["DEVICE_ID", "DATE_RECORDED"],
+        "refs": {
+            "STUDENT_ID": "Student",
+            "EVENT_ID": "Timetable"
+        }
+    },
+    "Devices": {
+        "mandatory": ["DEVICE_ID", "DEVICE_TYPE", "SITE_ID"],
+        "optional": ["ROOM_ID", "MAC_ADDRESS", "STATUS"]
+    },
+    "Staff": {
+        "mandatory": ["STAFF_ID", "STAFF_FORENAME", "STAFF_LAST_NAME", "STAFF_EMAIL"],
+        "optional": ["TUTOR_ID", "FACULTY_ID", "SCHOOL_ID", "STAFF_TYPE", "ROOM_ID"]
+    },
+    "Staff Security": {
+        "mandatory": ["STAFF_ID", "SECURITY_ROLE"],
+        "optional": ["ACCESS_LEVEL", "EXPIRY_DATE"]
+    },
+    "Sites": {
+        "mandatory": ["SITE_ID", "SITE_NAME"],
+        "optional": ["SITE_CODE", "LOCATION"]
+    },
+    "Rooms": {
+        "mandatory": ["ROOM_ID", "ROOM_NAME", "SITE_ID"],
+        "optional": ["CAPACITY"]
+    },
+    "Buildings": {
+        "mandatory": ["BUILDING_ID", "BUILDING_NAME", "SITE_ID"],
+        "optional": ["ADDRESS"]
+    },
+    
+}
+
+header_aliases = {
+    "ASSESSMENTTYPE": "ASSESSMENT_TYPE",
+    "MODULECODE": "MODULE_ID",
+    "SESSIONCODE": "MODULE_SESSION_CODE",
+    "WEIGHTING": "ASSESSMENT_WEIGHT",
+    "DUEDATE": "DUE_DATE"
+}
+
+def get_all_fields():
+    for spec in expected_headers.values():
+        if "all_fields" not in spec:
+            spec["all_fields"] = spec["mandatory"] + spec.get("optional", [])
+    return expected_headers
