@@ -23,6 +23,8 @@ from utils.seats_data_handler import (
     LEADING_ZERO_FIELDS,
     FORWARD_SLASH_MULTI_VALUE_FIELDS,
     PIPE_MULTI_VALUE_FIELDS,
+    load_timetable_spec,
+    load_spec_by_type,
 )
 
 
@@ -418,3 +420,180 @@ class TestSpecLoading:
         
         # Check changes were logged
         assert len(changes) > 0
+
+
+class TestTimetableSpec:
+    """Tests for Student Timetable specification loading and validation."""
+    
+    def test_load_timetable_spec(self, handler):
+        """Test that timetable spec loads correctly."""
+        spec = load_timetable_spec()
+        
+        assert spec is not None
+        assert spec['dataset_type'] == 'StudentTimetable'
+        assert spec['version'] == '8.2'
+    
+    def test_timetable_spec_has_32_fields(self, handler):
+        """Test that timetable spec has all 32 fields."""
+        spec = load_timetable_spec()
+        
+        assert len(spec['fields']) == 32
+    
+    def test_timetable_mandatory_fields(self, handler):
+        """Test that mandatory fields are correctly specified."""
+        spec = load_timetable_spec()
+        
+        expected_mandatory = [
+            'EVENT_ID', 'DAY', 'START_TIME', 'END_TIME',
+            'ROOM_ID', 'ROOM_NAME', 'COURSE_ID', 'COURSE_NAME',
+            'MODULE_ID', 'MODULE_NAME', 'SCHOOL_ID', 'SCHOOL_NAME',
+            'STUDENT_ID'
+        ]
+        
+        assert set(spec['mandatory_fields']) == set(expected_mandatory)
+    
+    def test_timetable_unique_key(self, handler):
+        """Test that unique key is EVENT_ID + DAY."""
+        spec = load_timetable_spec()
+        
+        assert spec['unique_key'] == ['EVENT_ID', 'DAY']
+    
+    def test_timetable_multi_value_fields(self, handler):
+        """Test that multi-value fields are correctly specified."""
+        spec = load_timetable_spec()
+        
+        multi_value_fields = [
+            'ROOM_ID', 'ROOM_NAME', 'SITE_CODE', 'SITE_NAME',
+            'TUTOR_ID', 'TUTOR', 'BUILDING_ID', 'BUILDING_NAME',
+            'GROUP_ID', 'GROUP_NAME'
+        ]
+        
+        for field_name in multi_value_fields:
+            field_spec = spec['fields'][field_name]
+            assert field_spec.get('multi_value') is True, f"{field_name} should be multi_value"
+            assert field_spec.get('separator') == '/', f"{field_name} should use / separator"
+    
+    def test_timetable_lesson_types(self, handler):
+        """Test that lesson types enum has all values."""
+        spec = load_timetable_spec()
+        
+        lesson_type = spec['fields']['LESSON_TYPE']
+        
+        assert lesson_type['type'] == 'enum'
+        assert lesson_type['default'] == 'L'
+        assert 'L' in lesson_type['values']  # Lecture
+        assert 'S' in lesson_type['values']  # Seminar
+        assert 'HYB' in lesson_type['values']  # Hybrid
+    
+    def test_timetable_delete_field(self, handler):
+        """Test that DELETE field is case-sensitive."""
+        spec = load_timetable_spec()
+        
+        delete_field = spec['fields']['DELETE']
+        
+        assert delete_field['case_sensitive'] is True
+        assert set(delete_field['values']) == {'Y', 'N'}
+    
+    def test_timetable_cross_file_fields(self, handler):
+        """Test that cross-file match fields are specified."""
+        spec = load_timetable_spec()
+        
+        cross_file_fields = spec['validation_rules']['cross_file_match_fields']
+        
+        expected = [
+            'SCHOOL_ID', 'SCHOOL_NAME', 'COURSE_ID', 'COURSE_NAME',
+            'MODULE_ID', 'MODULE_NAME', 'MODULE_GROUP', 'STUDENT_ID'
+        ]
+        
+        assert set(cross_file_fields) == set(expected)
+    
+    def test_timetable_location_hierarchy(self, handler):
+        """Test that location hierarchy rules are specified."""
+        spec = load_timetable_spec()
+        
+        hierarchy = spec['validation_rules']['location_hierarchy']
+        
+        assert 'rules' in hierarchy
+        assert len(hierarchy['rules']) == 4  # SITE_CODE, SITE_NAME, BUILDING_ID, BUILDING_NAME
+    
+    def test_validate_timetable_data(self, handler):
+        """Test validation against timetable spec."""
+        spec = load_timetable_spec()
+        
+        valid_df = pd.DataFrame({
+            'EVENT_ID': ['E001', 'E002'],
+            'DAY': ['2024-01-15', '2024-01-16'],
+            'START_TIME': ['09:00', '10:00'],
+            'END_TIME': ['10:00', '11:00'],
+            'ROOM_ID': ['R001', 'R002'],
+            'ROOM_NAME': ['Lab 1', 'Lab 2'],
+            'COURSE_ID': ['C001', 'C001'],
+            'COURSE_NAME': ['Computer Science', 'Computer Science'],
+            'MODULE_ID': ['M001', 'M001'],
+            'MODULE_NAME': ['Programming', 'Programming'],
+            'SCHOOL_ID': ['S001', 'S001'],
+            'SCHOOL_NAME': ['Engineering', 'Engineering'],
+            'STUDENT_ID': ['STU001', 'STU002'],
+            'LESSON_TYPE': ['L', 'S'],
+        })
+        
+        result = handler.validate_against_spec(valid_df, spec)
+        
+        # Should have no missing mandatory field errors
+        missing_mandatory = [e for e in result['errors'] if e.get('type') == 'missing_mandatory_field']
+        assert len(missing_mandatory) == 0
+    
+    def test_validate_timetable_missing_mandatory(self, handler):
+        """Test validation catches missing mandatory fields."""
+        spec = load_timetable_spec()
+        
+        # Missing STUDENT_ID
+        invalid_df = pd.DataFrame({
+            'EVENT_ID': ['E001'],
+            'DAY': ['2024-01-15'],
+            'START_TIME': ['09:00'],
+            'END_TIME': ['10:00'],
+            'ROOM_ID': ['R001'],
+            'ROOM_NAME': ['Lab 1'],
+        })
+        
+        result = handler.validate_against_spec(invalid_df, spec)
+        
+        # Should detect missing mandatory fields
+        missing_mandatory = [e for e in result['errors'] if e.get('type') == 'missing_mandatory_field']
+        missing_fields = [e['field'] for e in missing_mandatory]
+        assert 'STUDENT_ID' in missing_fields
+
+
+class TestLoadSpecByType:
+    """Tests for load_spec_by_type function."""
+    
+    def test_load_student_spec(self):
+        """Test loading student spec by type."""
+        spec = load_spec_by_type('Student')
+        assert spec['dataset_type'] == 'Student'
+    
+    def test_load_timetable_spec(self):
+        """Test loading timetable spec by type."""
+        spec = load_spec_by_type('StudentTimetable')
+        assert spec['dataset_type'] == 'StudentTimetable'
+    
+    def test_load_spec_case_insensitive(self):
+        """Test that spec loading is case insensitive."""
+        spec1 = load_spec_by_type('STUDENT')
+        spec2 = load_spec_by_type('student')
+        spec3 = load_spec_by_type('Student')
+        
+        assert spec1['dataset_type'] == spec2['dataset_type'] == spec3['dataset_type']
+    
+    def test_load_spec_with_spaces(self):
+        """Test that spec loading handles spaces."""
+        spec = load_spec_by_type('Student Timetable')
+        assert spec['dataset_type'] == 'StudentTimetable'
+    
+    def test_load_spec_invalid_type(self):
+        """Test that invalid type raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            load_spec_by_type('InvalidType')
+        
+        assert 'Unknown dataset type' in str(exc_info.value)

@@ -1,0 +1,496 @@
+{
+  "dataset_type": "StudentTimetable",
+  "version": "8.2",
+  "description": "SEATS Full Student Timetable Interface Specification",
+  "signature": ["EVENT_ID", "DAY", "STUDENT_ID"],
+  "unique_key": ["EVENT_ID", "DAY"],
+  "unique_key_notes": "EventId and Date make up the unique identifier for a scheduled class. Students scheduled on the same class should have a row per Student against the same EventId and Date.",
+  "mandatory_fields": [
+    "EVENT_ID",
+    "DAY",
+    "START_TIME",
+    "END_TIME",
+    "ROOM_ID",
+    "ROOM_NAME",
+    "COURSE_ID",
+    "COURSE_NAME",
+    "MODULE_ID",
+    "MODULE_NAME",
+    "SCHOOL_ID",
+    "SCHOOL_NAME",
+    "STUDENT_ID"
+  ],
+  "fields": {
+    "EVENT_ID": {
+      "position": 1,
+      "description": "Unique Event ID",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "api_mapping": "Schedules.Code",
+      "notes": "EventId and Date make up the unique identifier for a scheduled class. This field is how SEAtS distinguishes to update a lecture."
+    },
+    "DAY": {
+      "position": 2,
+      "description": "Date of lesson",
+      "type": "date",
+      "mandatory": true,
+      "format": "YYYY-MM-DD",
+      "api_mapping": "Schedules.DateFrom"
+    },
+    "START_TIME": {
+      "position": 3,
+      "description": "Start time of lesson",
+      "type": "time",
+      "mandatory": true,
+      "format": "HH:MM",
+      "api_mapping": "Schedules.DateFrom"
+    },
+    "END_TIME": {
+      "position": 4,
+      "description": "End time of lesson",
+      "type": "time",
+      "mandatory": true,
+      "format": "HH:MM",
+      "api_mapping": "Schedules.DateTo"
+    },
+    "ROOM_ID": {
+      "position": 5,
+      "description": "Room Code for lesson",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Location.Code (type = room)",
+      "notes": "If sending multiple instances, separate by forward slash. Each instance max 100 chars."
+    },
+    "ROOM_NAME": {
+      "position": 6,
+      "description": "Room name for lesson",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 300,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Location.Name (type = room)",
+      "notes": "If sending multiple instances, separate by forward slash. Each instance max 300 chars."
+    },
+    "COURSE_ID": {
+      "position": 7,
+      "description": "Programme ID",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "cross_file_match": true,
+      "api_mapping": "Catalog.Code (type = course)",
+      "notes": "Must match COURSE_ID in Student file"
+    },
+    "COURSE_NAME": {
+      "position": 8,
+      "description": "Course / Programme Name",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 200,
+      "fixed_length": true,
+      "cross_file_match": true,
+      "api_mapping": "Catalog.Name (type = course)",
+      "notes": "Must match COURSE_NAME in Student file"
+    },
+    "COURSE_SESSION_CODE": {
+      "position": 9,
+      "description": "Course / Programme Session Code if specified",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 100,
+      "fixed_length": true,
+      "preserve_leading_zeros": true,
+      "notes": "Replication of what is being sent in Student File. Used to distinguish same course attended by different Student Groups (Distance etc)."
+    },
+    "MODULE_ID": {
+      "position": 10,
+      "description": "Module ID",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "cross_file_match": true,
+      "api_mapping": "Catalog.Code (type = module)",
+      "notes": "Must match MODULE_ID in Student file"
+    },
+    "MODULE_SESSION_CODE": {
+      "position": 11,
+      "description": "Module Session Code",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 100,
+      "fixed_length": true,
+      "preserve_leading_zeros": true,
+      "notes": "Replication of what is being sent in Student File. Used to distinguish same module attended by different Student Groups (Distance etc)."
+    },
+    "MODULE_NAME": {
+      "position": 12,
+      "description": "Module Name",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 200,
+      "cross_file_match": true,
+      "api_mapping": "Catalog.Name (type = module)",
+      "notes": "Must match MODULE_NAME in Student file"
+    },
+    "LESSON_TYPE": {
+      "position": 13,
+      "description": "Lesson Type code",
+      "type": "enum",
+      "mandatory": false,
+      "max_length": 3,
+      "default": "L",
+      "values": [
+        "L", "S", "X", "P", "W", "T", "PR", "ST", "V", "A", "F", "LA", "DI",
+        "CA", "CO", "CR", "O", "R", "FS", "I", "M", "PL", "PRE", "RE", "AS",
+        "STU", "AR", "AU", "AC", "CL", "CLS", "DU", "MDT", "OOH", "PRS", "RS",
+        "SM", "TH", "TO", "WA", "XRY", "LCS", "OPT", "OR", "SCR", "WR", "EX",
+        "FIS", "PBL", "SPL", "SSM", "HYB"
+      ],
+      "value_descriptions": {
+        "L": "Lecture",
+        "S": "Seminar",
+        "X": "Other",
+        "P": "Practical",
+        "W": "Workshop",
+        "T": "Tutorial",
+        "PR": "Project",
+        "ST": "Studio",
+        "V": "External Visit",
+        "A": "Assessment",
+        "F": "Field Work",
+        "LA": "Laboratory",
+        "DI": "Drop In",
+        "CA": "Careers",
+        "CO": "Computing",
+        "CR": "Critique",
+        "O": "Online",
+        "R": "Review",
+        "FS": "Free Session",
+        "I": "Induction",
+        "M": "Mentoring",
+        "PL": "Placement",
+        "PRE": "Presentation",
+        "RE": "Revision",
+        "AS": "Assembly",
+        "STU": "Study",
+        "AR": "Assessment Resit",
+        "AU": "Audit",
+        "AC": "Acute",
+        "CL": "Clinic",
+        "CLS": "Clinical Skills",
+        "DU": "Day Unit",
+        "MDT": "MDT",
+        "OOH": "Oncall Out of Hours",
+        "PRS": "Prescribing",
+        "RS": "RS",
+        "SM": "Supervisory Meeting",
+        "TH": "Theatre",
+        "TO": "Test Observation",
+        "WA": "Ward Round",
+        "XRY": "X-ray Meeting",
+        "LCS": "Lecture/Seminar",
+        "OPT": "Optional",
+        "OR": "Oral",
+        "SCR": "Screen",
+        "WR": "Written",
+        "EX": "Examination",
+        "FIS": "Film Screening",
+        "PBL": "Problem Based Learning",
+        "SPL": "Self Paced Learning",
+        "SSM": "Special Study Module",
+        "HYB": "Hybrid"
+      },
+      "api_mapping": "Schedules.Type",
+      "notes": "Default is L (Lecture) if not populated. Students are marked Attended/UnAttended against these categories."
+    },
+    "SCHOOL_ID": {
+      "position": 14,
+      "description": "School ID",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "cross_file_match": true,
+      "api_mapping": "Catalog.Code (type = school)",
+      "notes": "Equivalent to DEPT ID in Student Data Interface. Must match SCHOOL_ID in Student file."
+    },
+    "SCHOOL_NAME": {
+      "position": 15,
+      "description": "School / Faculty Name",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 200,
+      "cross_file_match": true,
+      "api_mapping": "Catalog.Name (type = school)",
+      "notes": "Equivalent to DEPT NAME in Student Data Interface. Must match SCHOOL_NAME in Student file."
+    },
+    "SITE_CODE": {
+      "position": 16,
+      "description": "Site Code of room",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Location.Code (type = site)",
+      "dependency": ["BUILDING_ID", "ROOM_ID"],
+      "notes": "If sending multiple instances, separate by forward slash. If you include a site you must include a building and room."
+    },
+    "SITE_NAME": {
+      "position": 17,
+      "description": "Site location of Room",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 300,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Location.Name (type = site)",
+      "dependency": ["BUILDING_NAME", "ROOM_NAME"],
+      "notes": "If sending multiple instances, separate by forward slash. If you include a site you must include a building and room."
+    },
+    "TUTOR_ID": {
+      "position": 18,
+      "description": "Tutor identifier",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Staff.StaffNumber",
+      "notes": "If sending multiple instances, separate by forward slash (e.g., 'BF/ PC/ PH'). Each instance max 100 chars."
+    },
+    "TUTOR": {
+      "position": 19,
+      "description": "Tutor Fullname (e.g., John Doe)",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 200,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Staff.Surname, Staff.FirstName",
+      "dependency": ["TUTOR_ID"],
+      "notes": "If sent, data must be sent for TUTOR_ID. Multiple tutors separated by forward slash. Name parsing: comma splits Surname first, space/dot splits FirstName first."
+    },
+    "STUDENT_ID": {
+      "position": 20,
+      "description": "Student ID",
+      "type": "str",
+      "mandatory": true,
+      "max_length": 300,
+      "preserve_leading_zeros": true,
+      "cross_file_match": true,
+      "api_mapping": "Student.StudentNumber",
+      "notes": "Must match STUDENT_ID in Student file"
+    },
+    "LESSON_DESCRIPTION": {
+      "position": 21,
+      "description": "Description of lesson",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 300,
+      "api_mapping": "Schedule.Description"
+    },
+    "BUILDING_ID": {
+      "position": 22,
+      "description": "ID of building",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 100,
+      "preserve_leading_zeros": true,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Location.Code (type = building)",
+      "dependency": ["SITE_CODE", "ROOM_ID"],
+      "notes": "If sending multiple instances, separate by forward slash. If you include a building you must include a site and room."
+    },
+    "BUILDING_NAME": {
+      "position": 23,
+      "description": "Name of building",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 300,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Location.Name (type = building)",
+      "dependency": ["SITE_NAME", "ROOM_NAME"],
+      "notes": "If sending multiple instances, separate by forward slash. If you include a building you must include a site and room."
+    },
+    "GROUP_ID": {
+      "position": 24,
+      "description": "Group id",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 100,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Schedule.Groups",
+      "notes": "If sending multiple instances, separate by forward slash."
+    },
+    "GROUP_NAME": {
+      "position": 25,
+      "description": "Group description",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 200,
+      "multi_value": true,
+      "separator": "/",
+      "api_mapping": "Schedule.Groups",
+      "notes": "If sending multiple instances, separate by forward slash."
+    },
+    "IS_MANDATORY": {
+      "position": 26,
+      "description": "Determines if lesson is Mandatory or not",
+      "type": "enum",
+      "mandatory": false,
+      "max_length": 1,
+      "default": "Y",
+      "values": ["Y", "N"],
+      "workflow_constraint": true,
+      "api_mapping": "Schedule.IsMandatory",
+      "notes": "Default is Mandatory (Y). Non-Mandatory events do not contribute to Student's Overall Attendance %. Non-Mandatory % represented on Student Calendar within Attendance Dial."
+    },
+    "ATTENDANCE_STATUS": {
+      "position": 27,
+      "description": "Attendance Status of the student",
+      "type": "enum",
+      "mandatory": false,
+      "max_length": 100,
+      "values": ["", "MarkedAsAbsent", "MarkedAsLate", "MarkedAsAttended"],
+      "notes": "This field must be empty except for specific cases. Sets attendance status of student. Usually empty - SEAtS manages attendance automatically based on swipes. Only used for clients that already have attendance data at source."
+    },
+    "CLASSLINK": {
+      "position": 28,
+      "description": "Digital content link/URL for online class (E Attend functionality)",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 600,
+      "pattern": "^https?://.*$",
+      "notes": "Used for SEAtS E Attend functionality. Contains digital content link displayed within Lecture Details. Captures when student clicks link to view content and marks them as attended."
+    },
+    "DELETE": {
+      "position": 29,
+      "description": "Flag for removing timetables at source through import",
+      "type": "enum",
+      "mandatory": false,
+      "max_length": 1,
+      "values": ["Y", "N"],
+      "case_sensitive": true,
+      "notes": "Accepts Y or N (case sensitive). If Y on a student within a timetable event, student is removed. If Y for all students in event, students and timetable are removed. Backend config must be enabled first."
+    },
+    "VIRTUAL_ATTENDANCE": {
+      "position": 30,
+      "description": "Flag for E Attend virtual attendance functionality",
+      "type": "enum",
+      "mandatory": false,
+      "max_length": 1,
+      "values": ["Y", "N", ""],
+      "notes": "If Y, attendance status updates are applied for timetable if it has a classlink. Translates to 'Virtual Attendance' checkbox on Add/Edit Lecture Screen."
+    },
+    "MODULE_GROUP": {
+      "position": 31,
+      "description": "Module Group",
+      "type": "str",
+      "mandatory": false,
+      "max_length": 200,
+      "cross_file_match": true,
+      "notes": "Used in combination with MODULE_ID and MODULE_NAME. Same value as Student Data 26.MODULE_GROUP."
+    },
+    "COLLEGE_YEAR": {
+      "position": 32,
+      "description": "Name Value of College Year",
+      "type": "str",
+      "mandatory": false,
+      "notes": "Must match pre-existing college year in system (e.g., '2023'). If blank, defaults to current college year. Allows processing into upcoming/previous college years after Academic Rollover."
+    }
+  },
+  "validation_rules": {
+    "date_fields": ["DAY"],
+    "time_fields": ["START_TIME", "END_TIME"],
+    "cross_file_match_fields": [
+      "SCHOOL_ID", "SCHOOL_NAME", "COURSE_ID", "COURSE_NAME",
+      "MODULE_ID", "MODULE_NAME", "MODULE_GROUP", "STUDENT_ID"
+    ],
+    "preserve_leading_zeros": [
+      "EVENT_ID", "ROOM_ID", "COURSE_ID", "COURSE_SESSION_CODE",
+      "MODULE_ID", "MODULE_SESSION_CODE", "SCHOOL_ID", "SITE_CODE",
+      "TUTOR_ID", "STUDENT_ID", "BUILDING_ID", "GROUP_ID"
+    ],
+    "multi_value_forward_slash": [
+      "ROOM_ID", "ROOM_NAME", "SITE_CODE", "SITE_NAME",
+      "TUTOR_ID", "TUTOR", "BUILDING_ID", "BUILDING_NAME",
+      "GROUP_ID", "GROUP_NAME"
+    ],
+    "location_hierarchy": {
+      "description": "If you include a SITE you must include a BUILDING and a ROOM",
+      "rules": [
+        {
+          "if_present": ["SITE_CODE"],
+          "require": ["BUILDING_ID", "ROOM_ID"]
+        },
+        {
+          "if_present": ["SITE_NAME"],
+          "require": ["BUILDING_NAME", "ROOM_NAME"]
+        },
+        {
+          "if_present": ["BUILDING_ID"],
+          "require": ["SITE_CODE", "ROOM_ID"]
+        },
+        {
+          "if_present": ["BUILDING_NAME"],
+          "require": ["SITE_NAME", "ROOM_NAME"]
+        }
+      ]
+    },
+    "tutor_dependency": {
+      "description": "If TUTOR is sent, TUTOR_ID must also be sent",
+      "if_present": ["TUTOR"],
+      "require": ["TUTOR_ID"]
+    },
+    "multi_value_consistency": {
+      "description": "Fields supporting multiple values must be populated consistently on every row for a specific timetable event",
+      "field_groups": [
+        ["ROOM_ID", "ROOM_NAME"],
+        ["BUILDING_ID", "BUILDING_NAME"],
+        ["SITE_CODE", "SITE_NAME"],
+        ["TUTOR_ID", "TUTOR"],
+        ["GROUP_ID", "GROUP_NAME"]
+      ],
+      "notes": "Every row for every Student (for each unique event) should always be populated with the same consistent data."
+    }
+  },
+  "removal_configuration": {
+    "description": "Configuration for timetable removal functionality",
+    "settings": [
+      {
+        "name": "RemoveTimetable",
+        "default": false,
+        "notes": "Must be set to true by SEAtS (infrastructure configuration)"
+      },
+      {
+        "name": "RemoveStudentSchedule",
+        "default": false,
+        "notes": "Must be set to true by SEAtS (infrastructure configuration)"
+      }
+    ],
+    "delta_handling": {
+      "description": "Delta handling for timetable updates",
+      "behavior": "When enabled, if a Timetable file is imported with classes for future dates, the system determines what students are linked to the classid/date and removes only students not present in the latest file. Students still in the class remain so attendance is not affected.",
+      "key_fields": ["EVENT_ID", "DAY"]
+    }
+  },
+  "file_constraints": {
+    "max_size_manual_upload_mb": 5,
+    "max_size_sftp_mb": 50
+  }
+}

@@ -920,10 +920,53 @@ def load_student_spec() -> Dict[str, Any]:
     return get_seats_handler().load_spec(spec_path)
 
 
+def load_timetable_spec() -> Dict[str, Any]:
+    """Load the Student Timetable master spec."""
+    from config.config import SEATS_SPEC_PATH
+    spec_path = Path(SEATS_SPEC_PATH) / 'student_timetable_spec.json'
+    return get_seats_handler().load_spec(spec_path)
+
+
+def load_spec_by_type(dataset_type: str) -> Dict[str, Any]:
+    """
+    Load a master spec by dataset type.
+    
+    Args:
+        dataset_type: Type of dataset (Student, StudentTimetable, etc.)
+        
+    Returns:
+        Master spec dictionary
+        
+    Raises:
+        ValueError: If dataset type is not recognized
+    """
+    spec_map = {
+        'student': 'student_data_spec.json',
+        'studentdata': 'student_data_spec.json',
+        'timetable': 'student_timetable_spec.json',
+        'studenttimetable': 'student_timetable_spec.json',
+    }
+    
+    normalized_type = dataset_type.lower().replace('_', '').replace(' ', '')
+    
+    if normalized_type not in spec_map:
+        available = list(set(spec_map.values()))
+        raise ValueError(
+            f"Unknown dataset type: '{dataset_type}'. "
+            f"Available specs: {available}"
+        )
+    
+    from config.config import SEATS_SPEC_PATH
+    spec_path = Path(SEATS_SPEC_PATH) / spec_map[normalized_type]
+    return get_seats_handler().load_spec(spec_path)
+
+
 __all__ = [
     'SEATSDataHandler',
     'get_seats_handler',
     'load_student_spec',
+    'load_timetable_spec',
+    'load_spec_by_type',
     'MultiValueField',
     'CrossFileValidationResult',
     'LEADING_ZERO_FIELDS',
