@@ -824,6 +824,129 @@ class SEATSDataHandler:
             result = result.replace(seats_fmt, py_fmt)
         return result
     
+    def normalize_date_column(
+        self,
+        series: pd.Series,
+        target_format: str = '%Y-%m-%d'
+    ) -> Tuple[pd.Series, int, List[str]]:
+        """
+        Normalize date values to YYYY-MM-DD format.
+        
+        Handles common Excel/CSV date format issues:
+        - DD/MM/YYYY (European)
+        - MM/DD/YYYY (US)
+        - DD-MM-YYYY
+        - MM-DD-YYYY
+        - Excel serial dates
+        
+        Args:
+            series: Pandas Series containing date values
+            target_format: Output format (default YYYY-MM-DD)
+            
+        Returns:
+            Tuple of (normalized series, count of fixes, list of unfixable values)
+        """
+        result = series.copy()
+        fixes_count = 0
+        unfixable = []
+        
+        # Common date patterns to try
+        date_patterns = [
+            '%Y-%m-%d',      # YYYY-MM-DD (correct format)
+            '%d/%m/%Y',      # DD/MM/YYYY (European Excel)
+            '%m/%d/%Y',      # MM/DD/YYYY (US Excel)
+            '%d-%m-%Y',      # DD-MM-YYYY
+            '%m-%d-%Y',      # MM-DD-YYYY
+            '%Y/%m/%d',      # YYYY/MM/DD
+            '%d.%m.%Y',      # DD.MM.YYYY (some European)
+        ]
+        
+        for idx, value in series.items():
+            if pd.isna(value) or value == '':
+                continue
+                
+            str_value = str(value).strip()
+            
+            # Skip if already in correct format
+            if re.match(r'^\d{4}-\d{2}-\d{2}$', str_value):
+                continue
+            
+            # Try to parse with different patterns
+            parsed = None
+            for pattern in date_patterns:
+                try:
+                    from datetime import datetime
+                    parsed = datetime.strptime(str_value, pattern)
+                    break
+                except ValueError:
+                    continue
+            
+            # Try pandas datetime parser as fallback
+            if parsed is None:
+                try:
+                    parsed = pd.to_datetime(str_value, dayfirst=True)
+                    if hasattr(parsed, 'to_pydatetime'):
+                        parsed = parsed.to_pydatetime()
+                except:
+                    pass
+            
+            if parsed is not None:
+                result.iloc[idx] = parsed.strftime(target_format)
+                fixes_count += 1
+            else:
+                unfixable.append(str_value)
+        
+        return result, fixes_count, unfixable
+    
+    def normalize_dates_in_dataframe(
+        self,
+        df: pd.DataFrame,
+        spec: Dict[str, Any]
+    ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+        """
+        Normalize all date columns in a DataFrame based on spec.
+        
+        Args:
+            df: DataFrame to process
+            spec: Master spec with field definitions
+            
+        Returns:
+            Tuple of (normalized DataFrame, list of changes)
+        """
+        result_df = df.copy()
+        changes = []
+        
+        fields_spec = spec.get('fields', {})
+        
+        for field_name, field_spec in fields_spec.items():
+            if field_spec.get('type') != 'date':
+                continue
+            
+            col = self._find_column(result_df, field_name)
+            if col is None:
+                continue
+            
+            normalized, fixes_count, unfixable = self.normalize_date_column(
+                result_df[col]
+            )
+            
+            if fixes_count > 0:
+                result_df[col] = normalized
+                changes.append({
+                    'field': field_name,
+                    'fixer': 'date_normalize',
+                    'rows_changed': fixes_count,
+                    'target_format': 'YYYY-MM-DD'
+                })
+            
+            if unfixable:
+                self.logger.warning(
+                    f"Could not parse {len(unfixable)} date values in {field_name}: "
+                    f"{unfixable[:5]}"
+                )
+        
+        return result_df, changes
+    
     def apply_auto_fixes(
         self,
         df: pd.DataFrame,

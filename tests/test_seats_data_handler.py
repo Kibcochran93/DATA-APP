@@ -731,3 +731,70 @@ class TestStaffSpec:
         
         spec2 = load_spec_by_type('staff data')
         assert spec2['dataset_type'] == 'Staff'
+
+
+class TestDateNormalization:
+    """Tests for date format normalization."""
+    
+    def test_normalize_european_date(self, handler):
+        """Test normalizing DD/MM/YYYY format."""
+        series = pd.Series(['16/02/2026', '21/01/2026', '12/01/2026'])
+        
+        normalized, fixes, unfixable = handler.normalize_date_column(series)
+        
+        assert normalized.iloc[0] == '2026-02-16'
+        assert normalized.iloc[1] == '2026-01-21'
+        assert fixes == 3
+        assert len(unfixable) == 0
+    
+    def test_normalize_already_correct(self, handler):
+        """Test that correct format is unchanged."""
+        series = pd.Series(['2026-02-16', '2026-01-21'])
+        
+        normalized, fixes, unfixable = handler.normalize_date_column(series)
+        
+        assert normalized.iloc[0] == '2026-02-16'
+        assert fixes == 0
+    
+    def test_normalize_mixed_formats(self, handler):
+        """Test normalizing mixed date formats."""
+        series = pd.Series([
+            '2026-02-16',    # Correct
+            '16/02/2026',    # European
+            '02-16-2026',    # US with dashes
+            np.nan,          # Null
+            ''               # Empty
+        ])
+        
+        normalized, fixes, unfixable = handler.normalize_date_column(series)
+        
+        assert normalized.iloc[0] == '2026-02-16'
+        assert normalized.iloc[1] == '2026-02-16'
+        assert pd.isna(normalized.iloc[3])
+    
+    def test_normalize_with_null_values(self, handler):
+        """Test that null values are preserved."""
+        series = pd.Series([np.nan, '16/02/2026', None, ''])
+        
+        normalized, fixes, unfixable = handler.normalize_date_column(series)
+        
+        assert pd.isna(normalized.iloc[0])
+        assert normalized.iloc[1] == '2026-02-16'
+        assert pd.isna(normalized.iloc[2])
+    
+    def test_normalize_dates_in_dataframe(self, handler):
+        """Test normalizing dates in a DataFrame using spec."""
+        from utils.seats_data_handler import load_student_spec
+        spec = load_student_spec()
+        
+        df = pd.DataFrame({
+            'STUDENT_ID': ['001', '002'],
+            'MODULE_END': ['16/02/2026', '21/01/2026'],
+            'DAY': ['18/02/2026', '18/02/2026'],
+        })
+        
+        normalized_df, changes = handler.normalize_dates_in_dataframe(df, spec)
+        
+        assert normalized_df['MODULE_END'].iloc[0] == '2026-02-16'
+        assert normalized_df['DAY'].iloc[0] == '2026-02-18'
+        assert len(changes) == 2  # Two date columns fixed

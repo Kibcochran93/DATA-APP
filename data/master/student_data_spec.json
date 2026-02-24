@@ -2,10 +2,14 @@
   "dataset_type": "Student",
   "version": "8.2",
   "description": "SEATS Student Data Interface Specification",
-  "signature": ["STUDENT_ID", "STUDENT_FORENAME", "STUDENT_LAST_NAME"],
+  "signature": [
+    "STUDENT_ID",
+    "STUDENT_FORENAME",
+    "STUDENT_LAST_NAME"
+  ],
   "mandatory_fields": [
     "STUDENT_ID",
-    "STUDENT_FORENAME", 
+    "STUDENT_FORENAME",
     "STUDENT_LAST_NAME",
     "VISAREQUIRED",
     "COURSE_ID",
@@ -42,28 +46,42 @@
       "description": "Date - Programme Start",
       "type": "date",
       "mandatory": false,
-      "format": "YYYY-MM-DD"
+      "format": "YYYY-MM-DD",
+      "notes": ""
     },
     "TITLE": {
       "position": 5,
       "description": "Title",
       "type": "enum",
       "mandatory": false,
-      "values": ["MR", "MS", "MRS", "DR", "PROF", ""]
+      "values": [
+        "MR",
+        "MS",
+        "MRS",
+        "DR",
+        "PROF",
+        ""
+      ]
     },
     "DATE_OF_BIRTH": {
       "position": 6,
       "description": "Date of Birth",
       "type": "date",
       "mandatory": false,
-      "format": "YYYY-MM-DD"
+      "format": "YYYY-MM-DD",
+      "notes": ""
     },
     "GENDER": {
       "position": 7,
       "description": "Gender",
       "type": "enum",
       "mandatory": false,
-      "values": ["M", "F", "O", ""],
+      "values": [
+        "M",
+        "F",
+        "O",
+        ""
+      ],
       "notes": "M=Male, F=Female, O=Other"
     },
     "FEE_CATEGORY": {
@@ -72,9 +90,17 @@
       "type": "enum",
       "mandatory": false,
       "values": [
-        "Home/EU", "Overseas", "EU", "Channel Islands", "Study Abroad",
-        "Home", "Apprenticeship", "Discount fee category", "Standard fee",
-        "Writing Up", ""
+        "Home/EU",
+        "Overseas",
+        "EU",
+        "Channel Islands",
+        "Study Abroad",
+        "Home",
+        "Apprenticeship",
+        "Discount fee category",
+        "Standard fee",
+        "Writing Up",
+        ""
       ],
       "notes": "Determines IsNational flag - Overseas sets IsNational to false"
     },
@@ -84,7 +110,17 @@
       "type": "enum",
       "mandatory": false,
       "values": [
-        "FE", "PG", "PO", "PR", "UG", "FD", "FD1", "HN", "OT", "RE", ""
+        "FE",
+        "PG",
+        "PO",
+        "PR",
+        "UG",
+        "FD",
+        "FD1",
+        "HN",
+        "OT",
+        "RE",
+        ""
       ],
       "notes": "FE=Further Education, PG=Post Graduate, UG=Undergraduate, etc."
     },
@@ -93,7 +129,10 @@
       "description": "Is Tier4 Student",
       "type": "enum",
       "mandatory": true,
-      "values": ["Y", "N"],
+      "values": [
+        "Y",
+        "N"
+      ],
       "fixer": "uppercase"
     },
     "BADGE_NUMBER": {
@@ -144,14 +183,16 @@
       "description": "Cohort Start Date",
       "type": "date",
       "mandatory": false,
-      "format": "YYYY-MM-DD"
+      "format": "YYYY-MM-DD",
+      "notes": ""
     },
     "COHORT_END": {
       "position": 17,
       "description": "Cohort End Date",
       "type": "date",
       "mandatory": false,
-      "format": "YYYY-MM-DD"
+      "format": "YYYY-MM-DD",
+      "notes": ""
     },
     "MODULE_ID": {
       "position": 18,
@@ -174,7 +215,10 @@
       "description": "Module Status",
       "type": "enum",
       "mandatory": false,
-      "values": ["A", ""],
+      "values": [
+        "A",
+        ""
+      ],
       "default": "A",
       "notes": "A=Active (Monitored), any other value maps to Inactive (Not-Monitored)"
     },
@@ -235,14 +279,19 @@
       "description": "System Date to which Extract refers",
       "type": "date",
       "mandatory": false,
-      "format": "YYYY-MM-DD"
+      "format": "YYYY-MM-DD",
+      "notes": ""
     },
     "STUDENT_16-18": {
       "position": 28,
       "description": "Student Age Category",
       "type": "enum",
       "mandatory": false,
-      "values": ["under 19", "19 or older", ""]
+      "values": [
+        "under 19",
+        "19 or older",
+        ""
+      ]
     },
     "STUDENT_EMAIL": {
       "position": 29,
@@ -303,7 +352,12 @@
       "description": "Action Flag for record",
       "type": "enum",
       "mandatory": false,
-      "values": ["I", "U", "D", ""],
+      "values": [
+        "I",
+        "U",
+        "D",
+        ""
+      ],
       "notes": "I=Insert, U=Update, D=Delete"
     },
     "FACULTY_ID": {
@@ -356,10 +410,38 @@
       "mandatory": false,
       "default": "NA",
       "values": [
-        "FT", "PT", "SW", "PL", "DL", "FL", "AONA", "BM",
-        "FTP", "FTPR", "FTPS", "FTS", "PDR", "PMR", "PTD", "PTE", "PTM", "PTR",
-        "RPT", "RPTFPT", "WFT", "WPT", "DPT", "DFT", "BRFT", "BRPT",
-        "EX", "AC", "RP", "FTO", "NA", ""
+        "FT",
+        "PT",
+        "SW",
+        "PL",
+        "DL",
+        "FL",
+        "AONA",
+        "BM",
+        "FTP",
+        "FTPR",
+        "FTPS",
+        "FTS",
+        "PDR",
+        "PMR",
+        "PTD",
+        "PTE",
+        "PTM",
+        "PTR",
+        "RPT",
+        "RPTFPT",
+        "WFT",
+        "WPT",
+        "DPT",
+        "DFT",
+        "BRFT",
+        "BRPT",
+        "EX",
+        "AC",
+        "RP",
+        "FTO",
+        "NA",
+        ""
       ],
       "notes": "Defaults to NA if not populated. FT=Full Time, PT=Part Time, etc."
     },
@@ -370,8 +452,31 @@
       "mandatory": false,
       "default": "A",
       "values": [
-        "A", "S", "W", "T", "C", "DC", "DE", "NE", "EX", "N", "D", "PE",
-        "TWP", "DH", "RQ", "B", "BS", "P", "PO", "PS", "V", "L", "EO", "DR", ""
+        "A",
+        "S",
+        "W",
+        "T",
+        "C",
+        "DC",
+        "DE",
+        "NE",
+        "EX",
+        "N",
+        "D",
+        "PE",
+        "TWP",
+        "DH",
+        "RQ",
+        "B",
+        "BS",
+        "P",
+        "PO",
+        "PS",
+        "V",
+        "L",
+        "EO",
+        "DR",
+        ""
       ],
       "notes": "Default as A if not populated. A=Active maps to Monitored, all others map to Not-Monitored"
     },
@@ -493,15 +598,63 @@
     }
   },
   "validation_rules": {
-    "email_fields": ["STUDENT_EMAIL", "UNIVERSITY_EMAIL", "TUTOR_EMAIL"],
-    "date_fields": ["COHORT", "DATE_OF_BIRTH", "COHORT_START", "COHORT_END", "MODULE_START", "MODULE_END", "DAY", "EXPIRE_DATE"],
-    "cross_file_match_fields": ["SCHOOL_ID", "SCHOOL_NAME", "COURSE_ID", "COURSE_NAME", "MODULE_ID", "MODULE_NAME", "MODULE_GROUP"],
-    "preserve_leading_zeros": ["STUDENT_ID", "BADGE_NUMBER", "COURSE_ID", "COURSE_SESSION_CODE", "MODULE_ID", "MODULE_SESSION_CODE", "SCHOOL_ID", "SITE_ID", "FACULTY_ID", "PROGRAMME_ID"],
-    "hesa_code_fields": ["CTY_NATIONALITY", "CTY_DOMICILE", "CTY_BIRTH"]
+    "email_fields": [
+      "STUDENT_EMAIL",
+      "UNIVERSITY_EMAIL",
+      "TUTOR_EMAIL"
+    ],
+    "date_fields": [
+      "COHORT",
+      "DATE_OF_BIRTH",
+      "COHORT_START",
+      "COHORT_END",
+      "MODULE_START",
+      "MODULE_END",
+      "DAY",
+      "EXPIRE_DATE"
+    ],
+    "cross_file_match_fields": [
+      "SCHOOL_ID",
+      "SCHOOL_NAME",
+      "COURSE_ID",
+      "COURSE_NAME",
+      "MODULE_ID",
+      "MODULE_NAME",
+      "MODULE_GROUP"
+    ],
+    "preserve_leading_zeros": [
+      "STUDENT_ID",
+      "BADGE_NUMBER",
+      "COURSE_ID",
+      "COURSE_SESSION_CODE",
+      "MODULE_ID",
+      "MODULE_SESSION_CODE",
+      "SCHOOL_ID",
+      "SITE_ID",
+      "FACULTY_ID",
+      "PROGRAMME_ID"
+    ],
+    "hesa_code_fields": [
+      "CTY_NATIONALITY",
+      "CTY_DOMICILE",
+      "CTY_BIRTH"
+    ]
   },
   "import_update_monitoring": {
     "description": "Configuration for SFTP imports only",
     "when_true": "Students not included on import will be set to Monitored=false. All active students must be included on every import.",
     "when_false": "Students not included remain Monitored=true. Multiple daily imports supported."
+  },
+  "import_warnings": {
+    "date_format": {
+      "required": "YYYY-MM-DD",
+      "common_issues": [
+        "Excel may auto-format dates to regional settings (DD/MM/YYYY or MM/DD/YYYY)",
+        "CSV export from Excel can corrupt date formats",
+        "Recommendation: Format date columns as Text before exporting to CSV"
+      ],
+      "auto_fix": true,
+      "notes": "System will attempt to parse and normalize dates to YYYY-MM-DD format"
+    }
   }
 }
