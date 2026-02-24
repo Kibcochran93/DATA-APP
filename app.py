@@ -8,7 +8,7 @@ import sys
 import warnings
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 # Add project root to Python path
 project_root = Path(__file__).parent
@@ -20,9 +20,18 @@ try:
     import pandas as pd
     import plotly.express as px
     import plotly.graph_objects as go
-    import redis
 except ImportError as e:
     raise ImportError(f"Required dependencies not installed: {str(e)}")
+
+# Optional Redis import - not required for Windows executable
+REDIS_AVAILABLE = False
+redis = None
+try:
+    import redis as redis_module
+    redis = redis_module
+    REDIS_AVAILABLE = True
+except ImportError:
+    pass  # Redis not available, will use fallback
 
 # Local imports
 from utils.import_validator import validate_project_imports
@@ -88,6 +97,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = handle_exception
 
+
 def initialize_session_state() -> None:
     """
     Initialize session state variables.
@@ -105,6 +115,8 @@ def initialize_session_state() -> None:
             st.session_state.user = None
         if 'token' not in st.session_state:
             st.session_state.token = None
+        if 'redis_available' not in st.session_state:
+            st.session_state.redis_available = REDIS_AVAILABLE
             
         # Initialize all session state keys from config
         for key in SESSION_KEYS.values():
@@ -135,7 +147,8 @@ def initialize_session_state() -> None:
         log_exception(error, logger, {"action": "initialize_session_state"})
         raise error
 
-def check_auth():
+
+def check_auth() -> bool:
     """
     Check if user is authenticated.
     
@@ -146,6 +159,9 @@ def check_auth():
         AuthenticationError: If authentication check fails
     """
     if st.session_state.token is None:
+        return False
+    
+    if st.session_state.auth is None:
         return False
     
     try:
@@ -164,21 +180,121 @@ def check_auth():
         log_exception(error, logger, {"action": "check_auth"})
         return False
 
-def wait_for_redis(max_retries=5, retry_interval=5):
-    """Wait for Redis to be available."""
-    redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+
+def check_redis_connection(max_retries: int = 3, retry_interval: int = 2) -> bool:
+    """
+    Check if Redis is available and connected.
+    
+    This is optional - the application will work without Redis.
+    Redis is used for caching and session management in Docker deployments.
+    
+    Args:
+        max_retries: Maximum number of connection attempts
+        retry_interval: Seconds between retries
+        
+    Returns:
+        bool: True if Redis is connected, False otherwise
+    """
+    if not REDIS_AVAILABLE:
+        logger.info("Redis module not installed - running without Redis support")
+        return False
+    
+    # Check if Redis is enabled via environment
+    redis_enabled = os.getenv('REDIS_ENABLED', 'false').lower() == 'true'
+    if not redis_enabled:
+        logger.info("Redis disabled via REDIS_ENABLED environment variable")
+        return False
+    
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    
     for i in range(max_retries):
         try:
             r = redis.from_url(redis_url)
             r.ping()
+            logger.info(f"Successfully connected to Redis at {redis_url}")
             return True
         except redis.ConnectionError:
             if i < max_retries - 1:
                 logger.warning(f"Redis connection attempt {i+1} failed. Retrying in {retry_interval} seconds...")
                 time.sleep(retry_interval)
             else:
-                logger.error("Failed to connect to Redis after maximum retries")
+                logger.warning("Could not connect to Redis - continuing without Redis support")
                 return False
+        except Exception as e:
+            logger.warning(f"Redis error: {str(e)} - continuing without Redis support")
+            return False
+    
+    return False
+
+
+def render_data_upload() -> None:
+    """Render the data upload page."""
+    st.header("Data Upload")
+    
+    uploaded_file = file_uploader(
+        label="Upload your data file",
+        allowed_types=["csv", "xlsx", "xls", "json"],
+        key="main_file_upload"
+    )
+    
+    if uploaded_file is not None:
+        df = handle_file_upload(uploaded_file)
+        if df is not None:
+            st.success(f"Successfully loaded {len(df)} rows and {len(df.columns)} columns")
+            
+            # Show data preview
+            st.subheader("Data Preview")
+            st.dataframe(df.head(10))
+            
+            # Option to proceed to wizard
+            if st.button("Proceed to Validation Wizard", type="primary"):
+                st.session_state.df = df
+                st.query_params["page"] = "Wizard"
+                st.rerun()
+
+
+def render_data_analysis() -> None:
+    """Render the data analysis page."""
+    st.header("Data Analysis")
+    
+    df = st.session_state.get("df")
+    
+    if df is None or (hasattr(df, 'empty') and df.empty):
+        st.info("No data loaded. Please upload a file first.")
+        if st.button("Go to Upload"):
+            st.query_params["page"] = "Data Upload"
+            st.rerun()
+        return
+    
+    # Display validation results if available
+    validation_results = st.session_state.get("validation_results")
+    if validation_results:
+        render_validation_summary(validation_results)
+    
+    # Data editor
+    st.subheader("Data Editor")
+    edited_df = render_data_editor(df, key="analysis_editor")
+    
+    if edited_df is not None and not edited_df.equals(df):
+        if st.button("Save Changes"):
+            st.session_state.df = edited_df
+            st.success("Changes saved!")
+    
+    # Export options
+    st.subheader("Export")
+    render_export_options(df, st.session_state.get("user", {}).get("role", "user"))
+
+
+def render_settings_page() -> None:
+    """Render the settings page."""
+    st.header("Settings")
+    handle_settings()
+
+
+def render_wizard_page() -> None:
+    """Render the validation wizard page."""
+    run_wizard()
+
 
 def main() -> None:
     """Main application entry point."""
@@ -186,41 +302,60 @@ def main() -> None:
         # Initialize session state
         initialize_session_state()
         
+        # Optional Redis check (non-blocking)
+        if 'redis_checked' not in st.session_state:
+            st.session_state.redis_connected = check_redis_connection()
+            st.session_state.redis_checked = True
+        
         # Check authentication
         if not check_auth():
             render_login()
             return
         
         # Main application logic
-        st.title("Seats Data Analysis")
+        st.title("SEATS Data Validation")
         
         # Get current page from query params or default to Data Upload
         current_page = st.query_params.get("page", "Data Upload")
         
+        # Define available pages
+        pages = ["Data Upload", "Wizard", "Data Analysis", "Settings", "Register"]
+        
         # Sidebar navigation
         page = st.sidebar.selectbox(
             "Navigation",
-            ["Data Upload", "Data Analysis", "Settings", "Register"],
-            index=["Data Upload", "Data Analysis", "Settings", "Register"].index(current_page) if current_page in ["Data Upload", "Data Analysis", "Settings", "Register"] else 0
+            pages,
+            index=pages.index(current_page) if current_page in pages else 0
         )
+        
+        # Show Redis status in sidebar (for debugging)
+        if os.getenv('DEBUG', 'false').lower() == 'true':
+            with st.sidebar.expander("System Status"):
+                st.write(f"Redis Available: {REDIS_AVAILABLE}")
+                st.write(f"Redis Connected: {st.session_state.get('redis_connected', False)}")
         
         # Update active page in query params if changed
         if page != current_page:
             st.query_params["page"] = page
         
+        # Route to appropriate page
         if page == "Data Upload":
             render_data_upload()
+        elif page == "Wizard":
+            render_wizard_page()
         elif page == "Data Analysis":
             render_data_analysis()
         elif page == "Settings":
-            render_settings()
+            render_settings_page()
         elif page == "Register":
             render_register()
             
     except Exception as e:
         log_exception(e, logger, context={"action": "main"})
         st.error("An error occurred. Please try again.")
-        st.rerun()
+        if os.getenv('DEBUG', 'false').lower() == 'true':
+            st.exception(e)
+
 
 if __name__ == "__main__":
     main()

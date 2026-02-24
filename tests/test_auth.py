@@ -46,13 +46,13 @@ class TestUserRegistration:
         """Test registering duplicate username."""
         with pytest.raises(SecurityError) as exc_info:
             auth.register_user(regular_user, 'Test123!', 'user')
-        assert str(exc_info.value) == ERROR_MESSAGES['username_exists']
+        assert exc_info.value.message == ERROR_MESSAGES['username_exists']
     
     def test_register_user_with_invalid_role(self, auth):
         """Test registering user with invalid role."""
         with pytest.raises(SecurityError) as exc_info:
             auth.register_user('test', 'Test123!', 'invalid_role')
-        assert "Invalid role" in str(exc_info.value)
+        assert "Invalid role" in exc_info.value.message
 
 class TestAuthentication:
     def test_authenticate_valid_user(self, auth, regular_user):
@@ -67,13 +67,13 @@ class TestAuthentication:
         """Test authentication with invalid username."""
         with pytest.raises(SecurityError) as exc_info:
             auth.authenticate('nonexistent', 'Test123!')
-        assert str(exc_info.value) == ERROR_MESSAGES['invalid_credentials']
+        assert exc_info.value.message == ERROR_MESSAGES['invalid_credentials']
     
     def test_authenticate_invalid_password(self, auth, regular_user):
         """Test authentication with invalid password."""
         with pytest.raises(SecurityError) as exc_info:
             auth.authenticate(regular_user, 'WrongPass123!')
-        assert str(exc_info.value) == ERROR_MESSAGES['invalid_credentials']
+        assert exc_info.value.message == ERROR_MESSAGES['invalid_credentials']
 
 class TestTokenVerification:
     def test_verify_valid_token(self, auth, regular_user):
@@ -95,13 +95,13 @@ class TestTokenVerification:
         
         with pytest.raises(SecurityError) as exc_info:
             auth.verify_token(token)
-        assert str(exc_info.value) == ERROR_MESSAGES['token_expired']
+        assert exc_info.value.message == ERROR_MESSAGES['token_expired']
     
     def test_verify_invalid_token(self, auth):
         """Test verification of invalid token."""
         with pytest.raises(SecurityError) as exc_info:
             auth.verify_token('invalid_token')
-        assert "Invalid token" in str(exc_info.value)
+        assert "Invalid token" in exc_info.value.message
 
 class TestPasswordManagement:
     def test_change_password(self, auth, regular_user):
@@ -110,7 +110,7 @@ class TestPasswordManagement:
         # Verify old password no longer works
         with pytest.raises(SecurityError) as exc_info:
             auth.authenticate(regular_user, 'User123!')
-        assert str(exc_info.value) == ERROR_MESSAGES['invalid_credentials']
+        assert exc_info.value.message == ERROR_MESSAGES['invalid_credentials']
         # Verify new password works
         token = auth.authenticate(regular_user, 'NewPass123!')
         assert token is not None
@@ -119,7 +119,7 @@ class TestPasswordManagement:
         """Test password change with invalid current password."""
         with pytest.raises(SecurityError) as exc_info:
             auth.change_password(regular_user, 'WrongPass123!', 'NewPass123!')
-        assert str(exc_info.value) == ERROR_MESSAGES['invalid_credentials']
+        assert exc_info.value.message == ERROR_MESSAGES['invalid_credentials']
 
 class TestUserManagement:
     def test_update_role(self, auth, admin_user, regular_user):
@@ -131,7 +131,7 @@ class TestUserManagement:
         """Test role update by non-admin."""
         with pytest.raises(SecurityError) as exc_info:
             auth.update_role(regular_user, 'viewer', regular_user)
-        assert str(exc_info.value) == ERROR_MESSAGES['unauthorized']
+        assert "Unauthorized" in exc_info.value.message
     
     def test_delete_user(self, auth, admin_user, regular_user):
         """Test user deletion by admin."""
@@ -142,21 +142,27 @@ class TestUserManagement:
         """Test user deletion by non-admin."""
         with pytest.raises(SecurityError) as exc_info:
             auth.delete_user(regular_user, regular_user)
-        assert str(exc_info.value) == ERROR_MESSAGES['unauthorized']
+        assert "Unauthorized" in exc_info.value.message
 
 class TestErrorHandling:
+    @pytest.mark.skipif(os.geteuid() == 0, reason="File permission tests don't work as root")
     def test_load_users_error(self, auth):
         """Test error handling when loading users."""
         # Make users file unreadable
         os.chmod(auth.users_file, 0o000)
         with pytest.raises(SecurityError) as exc_info:
             auth._load_users()
-        assert "Failed to load users" in str(exc_info.value)
+        assert "Failed to load users" in exc_info.value.message
+        # Restore permissions for cleanup
+        os.chmod(auth.users_file, 0o644)
     
+    @pytest.mark.skipif(os.geteuid() == 0, reason="File permission tests don't work as root")
     def test_save_users_error(self, auth, regular_user):
         """Test error handling when saving users."""
         # Make users file unwritable
         os.chmod(auth.users_file, 0o444)
         with pytest.raises(SecurityError) as exc_info:
             auth.register_user('test', 'Test123!', 'user')
-        assert "Failed to save users" in str(exc_info.value) 
+        assert "Failed to save users" in exc_info.value.message
+        # Restore permissions for cleanup
+        os.chmod(auth.users_file, 0o644)

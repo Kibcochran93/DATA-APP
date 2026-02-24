@@ -3,7 +3,7 @@ Tests for monitoring setup and singleton behavior.
 """
 
 import pytest
-from autho import get_monitoring
+from utils.monitoring_setup import get_monitoring
 
 def test_monitoring_singleton():
     """Test that get_monitoring() returns the same instance."""

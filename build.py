@@ -28,6 +28,10 @@ ALLOWED_EXTENSIONS=.csv,.xlsx,.json
 # Logging
 LOG_LEVEL=INFO
 LOG_FILE=app.log
+
+# Redis (optional)
+REDIS_ENABLED=false
+REDIS_URL=redis://localhost:6379/0
 """
         with open('.env', 'w') as f:
             f.write(env_content)
@@ -90,9 +94,20 @@ def create_spec_file():
     for item in [
         ('config.py', '.'),
         ('.env', '.'),
+        ('ui_components.py', '.'),
+        ('wizard_controller.py', '.'),
         ('docs', 'docs'),
         ('security', 'security'),
         ('utils', 'utils'),
+        ('autho', 'autho'),
+        ('protection', 'protection'),
+        ('monitoring', 'monitoring'),
+        ('controller', 'controller'),
+        ('core', 'core'),
+        ('config', 'config'),
+        ('helpers', 'helpers'),
+        ('components', 'components'),
+        ('data', 'data'),
     ]:
         if os.path.exists(item[0]):
             data_files.append(item)
@@ -126,6 +141,9 @@ a = Analysis(
         'importlib.metadata',
         'importlib_metadata',
         'pkg_resources.py2_warn',
+        'chardet',
+        'psutil',
+        'pydantic',
     ],
     hookspath=['hooks'],
     hooksconfig={{}},
@@ -208,4 +226,4 @@ def build_executable():
         sys.exit(1)
 
 if __name__ == '__main__':
-    build_executable() 
+    build_executable()
