@@ -7,16 +7,19 @@ Implements SEATS Master Spec requirements including:
 - Cross-file validation for School/Course/Module consistency
 - DELETE field handling for timetables
 - Student Tags removal modes
+- Field validation based on master specs
 
 Reference: SEATS Data Interfaces Master Spec V8.2
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Any, Optional, Tuple, Set, Union
 from dataclasses import dataclass, field
+from pathlib import Path
 import logging
 import re
+import json
 
 from utils.debug_logger import setup_logger
 
@@ -600,6 +603,303 @@ class SEATSDataHandler:
         
         # Automated mode - return all as "to add", removal handled by comparison
         return df, pd.DataFrame(), pd.DataFrame()
+    
+    def load_spec(self, spec_path: Union[str, Path]) -> Dict[str, Any]:
+        """
+        Load a master spec from JSON file.
+        
+        Args:
+            spec_path: Path to the spec JSON file
+            
+        Returns:
+            Spec dictionary
+        """
+        spec_path = Path(spec_path)
+        
+        if not spec_path.exists():
+            raise FileNotFoundError(f"Spec file not found: {spec_path}")
+        
+        with open(spec_path, 'r', encoding='utf-8') as f:
+            spec = json.load(f)
+        
+        self.logger.info(f"Loaded spec: {spec.get('dataset_type', 'Unknown')} v{spec.get('version', '?')}")
+        return spec
+    
+    def validate_against_spec(
+        self,
+        df: pd.DataFrame,
+        spec: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Validate a DataFrame against a master spec.
+        
+        Args:
+            df: DataFrame to validate
+            spec: Master spec dictionary
+            
+        Returns:
+            Validation results dictionary
+        """
+        results = {
+            'is_valid': True,
+            'dataset_type': spec.get('dataset_type', 'Unknown'),
+            'spec_version': spec.get('version', 'Unknown'),
+            'total_rows': len(df),
+            'total_columns': len(df.columns),
+            'errors': [],
+            'warnings': [],
+            'field_results': {}
+        }
+        
+        fields_spec = spec.get('fields', {})
+        mandatory_fields = spec.get('mandatory_fields', [])
+        
+        # Check mandatory fields
+        for field_name in mandatory_fields:
+            col = self._find_column(df, field_name)
+            if col is None:
+                results['errors'].append({
+                    'type': 'missing_mandatory_field',
+                    'field': field_name,
+                    'message': f"Mandatory field '{field_name}' is missing"
+                })
+                results['is_valid'] = False
+            else:
+                # Check for blank values in mandatory field
+                blank_count = df[col].isna().sum() + (df[col] == '').sum()
+                if blank_count > 0:
+                    results['errors'].append({
+                        'type': 'blank_mandatory_values',
+                        'field': field_name,
+                        'message': f"Mandatory field '{field_name}' has {blank_count} blank values",
+                        'row_count': int(blank_count)
+                    })
+                    results['is_valid'] = False
+        
+        # Validate each field
+        for field_name, field_spec in fields_spec.items():
+            col = self._find_column(df, field_name)
+            
+            if col is None:
+                if field_spec.get('mandatory', False):
+                    # Already handled above
+                    pass
+                continue
+            
+            field_result = self._validate_field(df[col], field_name, field_spec)
+            results['field_results'][field_name] = field_result
+            
+            if field_result.get('errors'):
+                results['errors'].extend(field_result['errors'])
+                results['is_valid'] = False
+            
+            if field_result.get('warnings'):
+                results['warnings'].extend(field_result['warnings'])
+        
+        return results
+    
+    def _validate_field(
+        self,
+        series: pd.Series,
+        field_name: str,
+        field_spec: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Validate a single field against its spec."""
+        result = {
+            'field': field_name,
+            'total_values': len(series),
+            'non_null_values': series.notna().sum(),
+            'errors': [],
+            'warnings': []
+        }
+        
+        field_type = field_spec.get('type', 'str')
+        
+        # Check enum values
+        if field_type == 'enum' and 'values' in field_spec:
+            valid_values = set(field_spec['values'])
+            invalid_mask = ~series.isin(valid_values) & series.notna() & (series != '')
+            invalid_count = invalid_mask.sum()
+            
+            if invalid_count > 0:
+                invalid_examples = series[invalid_mask].head(5).tolist()
+                result['errors'].append({
+                    'type': 'invalid_enum_value',
+                    'field': field_name,
+                    'message': f"Field '{field_name}' has {invalid_count} invalid values",
+                    'invalid_count': int(invalid_count),
+                    'examples': invalid_examples,
+                    'valid_values': list(valid_values)[:10]
+                })
+        
+        # Check pattern
+        if 'pattern' in field_spec:
+            pattern = re.compile(field_spec['pattern'])
+            non_null = series.dropna()
+            non_null = non_null[non_null != '']
+            
+            if len(non_null) > 0:
+                matches = non_null.astype(str).str.match(pattern)
+                invalid_count = (~matches).sum()
+                
+                if invalid_count > 0:
+                    invalid_examples = non_null[~matches].head(5).tolist()
+                    result['warnings'].append({
+                        'type': 'pattern_mismatch',
+                        'field': field_name,
+                        'message': f"Field '{field_name}' has {invalid_count} values not matching pattern",
+                        'invalid_count': int(invalid_count),
+                        'pattern': field_spec['pattern'],
+                        'examples': invalid_examples
+                    })
+        
+        # Check max_length
+        if 'max_length' in field_spec:
+            max_len = field_spec['max_length']
+            lengths = series.astype(str).str.len()
+            over_max = lengths > max_len
+            over_count = over_max.sum()
+            
+            if over_count > 0:
+                result['warnings'].append({
+                    'type': 'max_length_exceeded',
+                    'field': field_name,
+                    'message': f"Field '{field_name}' has {over_count} values exceeding max length {max_len}",
+                    'over_count': int(over_count),
+                    'max_length': max_len
+                })
+        
+        # Check date format
+        if field_type == 'date' and 'format' in field_spec:
+            date_format = field_spec['format']
+            non_null = series.dropna()
+            non_null = non_null[non_null != '']
+            
+            if len(non_null) > 0:
+                try:
+                    pd.to_datetime(non_null, format=self._convert_date_format(date_format), errors='raise')
+                except Exception:
+                    # Try to count how many fail
+                    failed_count = 0
+                    for val in non_null:
+                        try:
+                            pd.to_datetime(val, format=self._convert_date_format(date_format))
+                        except:
+                            failed_count += 1
+                    
+                    if failed_count > 0:
+                        result['warnings'].append({
+                            'type': 'date_format_error',
+                            'field': field_name,
+                            'message': f"Field '{field_name}' has {failed_count} values with invalid date format",
+                            'expected_format': date_format,
+                            'failed_count': failed_count
+                        })
+        
+        # Check deprecated field
+        if field_spec.get('deprecated', False):
+            non_null = series.dropna()
+            non_null = non_null[non_null != '']
+            if len(non_null) > 0:
+                result['warnings'].append({
+                    'type': 'deprecated_field_used',
+                    'field': field_name,
+                    'message': f"Deprecated field '{field_name}' contains data. {field_spec.get('notes', '')}"
+                })
+        
+        return result
+    
+    def _convert_date_format(self, format_str: str) -> str:
+        """Convert SEATS date format to Python strftime format."""
+        conversions = {
+            'YYYY': '%Y',
+            'MM': '%m',
+            'DD': '%d',
+            'HH': '%H',
+            'mm': '%M',
+            'SS': '%S',
+        }
+        result = format_str
+        for seats_fmt, py_fmt in conversions.items():
+            result = result.replace(seats_fmt, py_fmt)
+        return result
+    
+    def apply_auto_fixes(
+        self,
+        df: pd.DataFrame,
+        spec: Dict[str, Any]
+    ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+        """
+        Apply auto-fixes based on spec fixer rules.
+        
+        Args:
+            df: DataFrame to fix
+            spec: Master spec dictionary
+            
+        Returns:
+            Tuple of (fixed DataFrame, list of changes made)
+        """
+        fixed_df = df.copy()
+        changes = []
+        
+        fields_spec = spec.get('fields', {})
+        
+        for field_name, field_spec in fields_spec.items():
+            col = self._find_column(fixed_df, field_name)
+            
+            if col is None:
+                continue
+            
+            fixer = field_spec.get('fixer')
+            
+            if fixer == 'uppercase':
+                original = fixed_df[col].copy()
+                fixed_df[col] = fixed_df[col].astype(str).str.upper()
+                changed = (original != fixed_df[col]).sum()
+                if changed > 0:
+                    changes.append({
+                        'field': field_name,
+                        'fixer': 'uppercase',
+                        'rows_changed': int(changed)
+                    })
+            
+            elif fixer == 'lowercase':
+                original = fixed_df[col].copy()
+                fixed_df[col] = fixed_df[col].astype(str).str.lower()
+                changed = (original != fixed_df[col]).sum()
+                if changed > 0:
+                    changes.append({
+                        'field': field_name,
+                        'fixer': 'lowercase',
+                        'rows_changed': int(changed)
+                    })
+            
+            elif fixer == 'strip':
+                original = fixed_df[col].copy()
+                fixed_df[col] = fixed_df[col].astype(str).str.strip()
+                changed = (original != fixed_df[col]).sum()
+                if changed > 0:
+                    changes.append({
+                        'field': field_name,
+                        'fixer': 'strip',
+                        'rows_changed': int(changed)
+                    })
+            
+            # Apply default values
+            if 'default' in field_spec:
+                default_val = field_spec['default']
+                null_mask = fixed_df[col].isna() | (fixed_df[col] == '')
+                null_count = null_mask.sum()
+                if null_count > 0:
+                    fixed_df.loc[null_mask, col] = default_val
+                    changes.append({
+                        'field': field_name,
+                        'fixer': 'default_value',
+                        'default': default_val,
+                        'rows_changed': int(null_count)
+                    })
+        
+        return fixed_df, changes
 
 
 # Singleton instance for convenience
@@ -613,9 +913,17 @@ def get_seats_handler() -> SEATSDataHandler:
     return _handler_instance
 
 
+def load_student_spec() -> Dict[str, Any]:
+    """Load the Student Data master spec."""
+    from config.config import SEATS_SPEC_PATH
+    spec_path = Path(SEATS_SPEC_PATH) / 'student_data_spec.json'
+    return get_seats_handler().load_spec(spec_path)
+
+
 __all__ = [
     'SEATSDataHandler',
     'get_seats_handler',
+    'load_student_spec',
     'MultiValueField',
     'CrossFileValidationResult',
     'LEADING_ZERO_FIELDS',

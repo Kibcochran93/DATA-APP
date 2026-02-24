@@ -286,3 +286,135 @@ class TestSingleton:
         handler2 = get_seats_handler()
         
         assert handler1 is handler2
+
+
+class TestSpecLoading:
+    """Tests for spec loading and validation."""
+    
+    def test_load_spec_student(self, handler):
+        """Test loading the student spec."""
+        from pathlib import Path
+        spec_path = Path(__file__).parent.parent / 'data' / 'master' / 'student_data_spec.json'
+        
+        if spec_path.exists():
+            spec = handler.load_spec(spec_path)
+            
+            assert spec['dataset_type'] == 'Student'
+            assert 'fields' in spec
+            assert 'mandatory_fields' in spec
+            assert 'STUDENT_ID' in spec['mandatory_fields']
+    
+    def test_validate_against_spec(self, handler):
+        """Test validation against spec."""
+        # Create a simple spec
+        spec = {
+            'dataset_type': 'Test',
+            'version': '1.0',
+            'mandatory_fields': ['ID', 'NAME'],
+            'fields': {
+                'ID': {
+                    'type': 'str',
+                    'mandatory': True
+                },
+                'NAME': {
+                    'type': 'str',
+                    'mandatory': True
+                },
+                'STATUS': {
+                    'type': 'enum',
+                    'mandatory': False,
+                    'values': ['A', 'I', '']
+                }
+            }
+        }
+        
+        # Valid data
+        df_valid = pd.DataFrame({
+            'ID': ['001', '002'],
+            'NAME': ['John', 'Jane'],
+            'STATUS': ['A', 'I']
+        })
+        
+        result = handler.validate_against_spec(df_valid, spec)
+        assert result['is_valid']
+        assert len(result['errors']) == 0
+        
+        # Invalid data - missing mandatory field
+        df_missing = pd.DataFrame({
+            'ID': ['001', '002'],
+            # NAME is missing
+        })
+        
+        result = handler.validate_against_spec(df_missing, spec)
+        assert not result['is_valid']
+        assert any(e['type'] == 'missing_mandatory_field' for e in result['errors'])
+    
+    def test_validate_enum_values(self, handler):
+        """Test enum value validation."""
+        spec = {
+            'dataset_type': 'Test',
+            'version': '1.0',
+            'mandatory_fields': [],
+            'fields': {
+                'GENDER': {
+                    'type': 'enum',
+                    'values': ['M', 'F', 'O', '']
+                }
+            }
+        }
+        
+        df = pd.DataFrame({
+            'GENDER': ['M', 'F', 'X', 'INVALID']  # X and INVALID are not valid
+        })
+        
+        result = handler.validate_against_spec(df, spec)
+        
+        # Should have enum validation error
+        enum_errors = [e for e in result['errors'] if e['type'] == 'invalid_enum_value']
+        assert len(enum_errors) > 0
+        assert enum_errors[0]['invalid_count'] == 2
+    
+    def test_apply_auto_fixes(self, handler):
+        """Test auto-fix application."""
+        spec = {
+            'dataset_type': 'Test',
+            'version': '1.0',
+            'mandatory_fields': [],
+            'fields': {
+                'VISAREQUIRED': {
+                    'type': 'enum',
+                    'fixer': 'uppercase',
+                    'values': ['Y', 'N']
+                },
+                'EMAIL': {
+                    'type': 'str',
+                    'fixer': 'strip'
+                },
+                'STATUS': {
+                    'type': 'enum',
+                    'default': 'A',
+                    'values': ['A', 'I', '']
+                }
+            }
+        }
+        
+        df = pd.DataFrame({
+            'VISAREQUIRED': ['y', 'n', 'Y'],
+            'EMAIL': ['  test@example.com  ', 'user@test.com', '  space@space.com'],
+            'STATUS': ['A', '', np.nan]
+        })
+        
+        fixed_df, changes = handler.apply_auto_fixes(df, spec)
+        
+        # Check uppercase was applied
+        assert fixed_df['VISAREQUIRED'].iloc[0] == 'Y'
+        assert fixed_df['VISAREQUIRED'].iloc[1] == 'N'
+        
+        # Check strip was applied
+        assert fixed_df['EMAIL'].iloc[0] == 'test@example.com'
+        
+        # Check default was applied
+        assert fixed_df['STATUS'].iloc[1] == 'A'
+        
+        # Check changes were logged
+        assert len(changes) > 0
