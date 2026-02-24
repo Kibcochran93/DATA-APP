@@ -1,3 +1,9 @@
+"""
+Authentication module for the SEATS application.
+
+Provides user authentication, authorization, and access control.
+"""
+
 from typing import Dict, List, Optional, Union, Any
 import hashlib
 import os
@@ -6,31 +12,27 @@ import logging
 from datetime import datetime, timedelta
 import jwt
 from cryptography.fernet import Fernet
+
+# Use absolute import - not relative
 from utils.error_handler import SecurityError
 
 # Global authentication instance
 _auth_instance = None
 
+
 def get_auth_instance() -> 'Authentication':
-    """Get or create the global authentication instance."""
+    """
+    Get or create the global authentication instance.
+    
+    Returns:
+        Authentication instance
+    """
     global _auth_instance
     if _auth_instance is None:
-        from security.config import SecurityConfig
-        security_config = SecurityConfig()
-        config = {
-            'jwt': {
-                'secret_key': security_config.secret_key,
-                'token_expiry': security_config.token_expiry
-            },
-            'users': {
-                'file_path': os.path.join(os.getenv('APP_DATA_DIR', '/app/data'), 'users.json')
-            },
-            'encryption': {
-                'key': os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
-            }
-        }
-        _auth_instance = Authentication(config)
+        from security.config import SecurityConfig, AUTH_CONFIG
+        _auth_instance = Authentication(AUTH_CONFIG)
     return _auth_instance
+
 
 def authenticate_user(username: str, password: str) -> str:
     """
@@ -47,6 +49,7 @@ def authenticate_user(username: str, password: str) -> str:
         SecurityError: If authentication fails
     """
     return get_auth_instance().authenticate(username, password)
+
 
 def authorize_access(token: str, required_role: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -70,8 +73,12 @@ def authorize_access(token: str, required_role: Optional[str] = None) -> Dict[st
         
     return user_info
 
+
 class Authentication:
     """Handles user authentication and access control."""
+    
+    # Valid roles
+    VALID_ROLES = {'admin', 'user', 'viewer'}
     
     def __init__(self, config: Dict[str, Any]):
         """
@@ -90,6 +97,11 @@ class Authentication:
         key = config['encryption']['key']
         if isinstance(key, str):
             key = key.encode()
+        elif isinstance(key, bytes):
+            pass
+        else:
+            key = Fernet.generate_key()
+        
         self.fernet = Fernet(key)
         
         # Load users if file exists
@@ -104,7 +116,8 @@ class Authentication:
             return {}
         except Exception as e:
             self.logger.error(f"Failed to load users: {str(e)}")
-            raise SecurityError("Failed to load users")
+            # Return empty dict instead of raising to allow fresh start
+            return {}
     
     def _save_users(self) -> None:
         """Save users to file."""
@@ -147,7 +160,7 @@ class Authentication:
             return key == new_key
         except Exception as e:
             self.logger.error(f"Password verification failed: {str(e)}")
-            raise SecurityError("Password verification failed")
+            return False
     
     def register_user(self, username: str, password: str, role: str = 'user') -> None:
         """
@@ -165,6 +178,9 @@ class Authentication:
             if username in self.users:
                 raise SecurityError("Username already exists")
             
+            if role not in self.VALID_ROLES:
+                raise SecurityError(f"Invalid role: {role}. Must be one of: {self.VALID_ROLES}")
+            
             self.users[username] = {
                 'password_hash': self._hash_password(password),
                 'role': role,
@@ -173,6 +189,8 @@ class Authentication:
             }
             self._save_users()
             
+        except SecurityError:
+            raise
         except Exception as e:
             self.logger.error(f"User registration failed: {str(e)}")
             raise SecurityError(f"User registration failed: {str(e)}")
@@ -216,9 +234,11 @@ class Authentication:
             
             return token
             
+        except SecurityError:
+            raise
         except Exception as e:
             self.logger.error(f"Authentication failed: {str(e)}")
-            raise SecurityError(f"Authentication failed: {str(e)}")
+            raise SecurityError("Authentication failed")
     
     def verify_token(self, token: str) -> Dict[str, Any]:
         """
@@ -270,11 +290,13 @@ class Authentication:
             
             user = self.users[username]
             if not self._verify_password(user['password_hash'], old_password):
-                raise SecurityError("Invalid current password")
+                raise SecurityError("Invalid username or password")
             
             user['password_hash'] = self._hash_password(new_password)
             self._save_users()
             
+        except SecurityError:
+            raise
         except Exception as e:
             self.logger.error(f"Password change failed: {str(e)}")
             raise SecurityError(f"Password change failed: {str(e)}")
@@ -286,7 +308,7 @@ class Authentication:
         Args:
             username: Username to update
             new_role: New role
-            admin_username: Admin username
+            admin_username: Admin username performing the action
             
         Raises:
             SecurityError: If role update fails
@@ -298,9 +320,14 @@ class Authentication:
             if username not in self.users:
                 raise SecurityError("User not found")
             
+            if new_role not in self.VALID_ROLES:
+                raise SecurityError(f"Invalid role: {new_role}")
+            
             self.users[username]['role'] = new_role
             self._save_users()
             
+        except SecurityError:
+            raise
         except Exception as e:
             self.logger.error(f"Role update failed: {str(e)}")
             raise SecurityError(f"Role update failed: {str(e)}")
@@ -311,7 +338,7 @@ class Authentication:
         
         Args:
             username: Username to delete
-            admin_username: Admin username
+            admin_username: Admin username performing the action
             
         Raises:
             SecurityError: If user deletion fails
@@ -323,9 +350,48 @@ class Authentication:
             if username not in self.users:
                 raise SecurityError("User not found")
             
+            if username == admin_username:
+                raise SecurityError("Cannot delete yourself")
+            
             del self.users[username]
             self._save_users()
             
+        except SecurityError:
+            raise
         except Exception as e:
             self.logger.error(f"User deletion failed: {str(e)}")
-            raise SecurityError(f"User deletion failed: {str(e)}") 
+            raise SecurityError(f"User deletion failed: {str(e)}")
+    
+    def list_users(self, admin_username: str) -> List[Dict[str, Any]]:
+        """
+        List all users (admin only).
+        
+        Args:
+            admin_username: Admin username
+            
+        Returns:
+            List of user information (excluding password hashes)
+            
+        Raises:
+            SecurityError: If not authorized
+        """
+        if admin_username not in self.users or self.users[admin_username]['role'] != 'admin':
+            raise SecurityError("Unauthorized")
+        
+        return [
+            {
+                'username': username,
+                'role': info['role'],
+                'created_at': info.get('created_at'),
+                'last_login': info.get('last_login')
+            }
+            for username, info in self.users.items()
+        ]
+
+
+__all__ = [
+    'Authentication',
+    'authenticate_user',
+    'authorize_access',
+    'get_auth_instance'
+]
