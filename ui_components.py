@@ -614,6 +614,248 @@ def render_monitoring_dashboard() -> None:
 
 
 # =============================================================================
+# Cross-File Validation Components
+# =============================================================================
+
+def render_cross_file_validation(
+    student_df: Optional[pd.DataFrame] = None,
+    timetable_df: Optional[pd.DataFrame] = None
+) -> Dict[str, Any]:
+    """
+    Render cross-file validation UI for Student/Timetable consistency.
+    
+    Per SEATS Master Spec: School/Course/Module values must match between files.
+    
+    Args:
+        student_df: Student data DataFrame (optional, can upload)
+        timetable_df: Timetable data DataFrame (optional, can upload)
+        
+    Returns:
+        Validation results dictionary
+    """
+    st.markdown("### Cross-File Validation")
+    st.info(
+        "Per SEATS Master Spec: School, Course, and Module fields must match "
+        "identically between Student and Timetable files."
+    )
+    
+    results = {"validated": False, "errors": [], "warnings": []}
+    
+    # File upload if not provided
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Student File")
+        if student_df is None:
+            student_file = st.file_uploader(
+                "Upload Student Data",
+                type=["csv", "xlsx"],
+                key="cross_val_student"
+            )
+            if student_file:
+                from utils.seats_data_handler import get_seats_handler
+                handler = get_seats_handler()
+                if student_file.name.endswith(".csv"):
+                    student_df = handler.read_csv_preserve_leading_zeros(student_file)
+                else:
+                    student_df = handler.read_excel_preserve_leading_zeros(student_file)
+                st.success(f"Loaded {len(student_df)} rows")
+        else:
+            st.success(f"Student data loaded: {len(student_df)} rows")
+    
+    with col2:
+        st.markdown("#### Timetable File")
+        if timetable_df is None:
+            timetable_file = st.file_uploader(
+                "Upload Timetable Data",
+                type=["csv", "xlsx"],
+                key="cross_val_timetable"
+            )
+            if timetable_file:
+                from utils.seats_data_handler import get_seats_handler
+                handler = get_seats_handler()
+                if timetable_file.name.endswith(".csv"):
+                    timetable_df = handler.read_csv_preserve_leading_zeros(timetable_file)
+                else:
+                    timetable_df = handler.read_excel_preserve_leading_zeros(timetable_file)
+                st.success(f"Loaded {len(timetable_df)} rows")
+        else:
+            st.success(f"Timetable data loaded: {len(timetable_df)} rows")
+    
+    # Validate if both files are loaded
+    if student_df is not None and timetable_df is not None:
+        if st.button("Validate Cross-File Consistency", type="primary"):
+            with st.spinner("Validating..."):
+                from utils.seats_data_handler import get_seats_handler
+                handler = get_seats_handler()
+                
+                validation_result = handler.validate_cross_file_consistency(
+                    student_df, timetable_df
+                )
+                
+                results["validated"] = True
+                
+                if validation_result.is_valid:
+                    st.success("✓ Cross-file validation passed! All values match.")
+                else:
+                    st.error("✗ Cross-file validation found issues")
+                    
+                    # Show mismatches
+                    if validation_result.mismatches:
+                        st.markdown("#### Value Mismatches")
+                        st.warning(
+                            "The following fields have different values for the same ID "
+                            "in Student and Timetable files:"
+                        )
+                        for mismatch in validation_result.mismatches:
+                            st.markdown(
+                                f"- **{mismatch['field']}**: "
+                                f"Student: `{mismatch['student_value']}` vs "
+                                f"Timetable: `{mismatch['timetable_value']}`"
+                            )
+                        results["errors"].extend(validation_result.mismatches)
+                    
+                    # Show missing records
+                    if validation_result.missing_in_timetable:
+                        with st.expander(f"IDs in Student but not in Timetable ({len(validation_result.missing_in_timetable)})"):
+                            for item in list(validation_result.missing_in_timetable)[:20]:
+                                st.text(f"- {item}")
+                            if len(validation_result.missing_in_timetable) > 20:
+                                st.text(f"... and {len(validation_result.missing_in_timetable) - 20} more")
+                    
+                    if validation_result.missing_in_student:
+                        with st.expander(f"IDs in Timetable but not in Student ({len(validation_result.missing_in_student)})"):
+                            for item in list(validation_result.missing_in_student)[:20]:
+                                st.text(f"- {item}")
+                            if len(validation_result.missing_in_student) > 20:
+                                st.text(f"... and {len(validation_result.missing_in_student) - 20} more")
+                
+                # Show warnings
+                if validation_result.warnings:
+                    st.markdown("#### Warnings")
+                    for warning in validation_result.warnings:
+                        st.warning(warning)
+                    results["warnings"].extend(validation_result.warnings)
+    
+    return results
+
+
+def render_multi_value_field_preview(
+    df: pd.DataFrame,
+    field_name: str
+) -> None:
+    """
+    Preview multi-value fields (split rooms, multiple tutors, etc.).
+    
+    Args:
+        df: DataFrame containing the field
+        field_name: Name of the multi-value field
+    """
+    if field_name not in df.columns:
+        st.warning(f"Field '{field_name}' not found in data")
+        return
+    
+    from utils.seats_data_handler import get_seats_handler
+    handler = get_seats_handler()
+    
+    # Parse the field
+    parsed = df[field_name].apply(lambda x: handler.parse_multi_value_field(x, field_name))
+    
+    # Count multi-value entries
+    multi_value_count = sum(1 for p in parsed if len(p.values) > 1)
+    
+    st.markdown(f"#### Multi-Value Field: {field_name}")
+    st.info(f"Found {multi_value_count} rows with multiple values (separated by {'|' if 'badge' in field_name.lower() else '/'})")
+    
+    if multi_value_count > 0:
+        # Show examples
+        with st.expander("View examples"):
+            examples = df[parsed.apply(lambda x: len(x.values) > 1)].head(5)
+            for idx, row in examples.iterrows():
+                original = row[field_name]
+                parsed_val = handler.parse_multi_value_field(original, field_name)
+                st.markdown(f"- **Original**: `{original}`")
+                st.markdown(f"  **Parsed values**: {parsed_val.values}")
+        
+        # Option to expand
+        if st.checkbox(f"Expand '{field_name}' to separate rows", key=f"expand_{field_name}"):
+            expanded_df = handler.expand_multi_value_rows(df, field_name)
+            st.success(f"Expanded from {len(df)} to {len(expanded_df)} rows")
+            st.dataframe(expanded_df[[field_name]].head(20))
+            return expanded_df
+    
+    return None
+
+
+def render_delete_field_processing(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    UI for processing DELETE field in timetable data.
+    
+    Args:
+        df: DataFrame with potential DELETE field
+        
+    Returns:
+        Tuple of (records_to_keep, records_to_delete)
+    """
+    from utils.seats_data_handler import get_seats_handler
+    handler = get_seats_handler()
+    
+    st.markdown("### DELETE Field Processing")
+    st.info("Per SEATS Master Spec V7.3: DELETE field values 'Y' or 'N' are case-sensitive.")
+    
+    # Check if DELETE field exists
+    delete_col = None
+    for col in df.columns:
+        if col.upper() == 'DELETE':
+            delete_col = col
+            break
+    
+    if delete_col is None:
+        st.info("No DELETE column found in data. All records will be kept.")
+        return df, pd.DataFrame()
+    
+    # Show current DELETE field stats
+    delete_counts = df[delete_col].value_counts()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Records", len(df))
+    with col2:
+        y_count = delete_counts.get('Y', 0)
+        st.metric("Marked for Delete (Y)", y_count)
+    with col3:
+        n_count = delete_counts.get('N', 0) + delete_counts.get('', 0) + df[delete_col].isna().sum()
+        st.metric("To Keep (N/blank)", n_count)
+    
+    # Check for invalid values
+    valid_values = {'Y', 'N', '', None}
+    invalid_mask = ~df[delete_col].isin(['Y', 'N', '']) & df[delete_col].notna()
+    if invalid_mask.any():
+        invalid_values = df[invalid_mask][delete_col].unique()
+        st.warning(
+            f"Found invalid DELETE values (must be 'Y' or 'N', case-sensitive): "
+            f"{list(invalid_values)}"
+        )
+    
+    # Process button
+    if st.button("Process DELETE Field"):
+        records_to_keep, records_to_delete = handler.process_delete_field(df, delete_col)
+        
+        st.success(
+            f"Processed: {len(records_to_keep)} records to keep, "
+            f"{len(records_to_delete)} records to delete"
+        )
+        
+        if len(records_to_delete) > 0:
+            with st.expander("View records to be deleted"):
+                st.dataframe(records_to_delete.head(20))
+        
+        return records_to_keep, records_to_delete
+    
+    return df, pd.DataFrame()
+
+
+# =============================================================================
 # File Upload Components
 # =============================================================================
 
@@ -692,4 +934,9 @@ __all__ = [
     
     # File Upload
     "file_uploader",
+    
+    # Cross-File Validation (SEATS-specific)
+    "render_cross_file_validation",
+    "render_multi_value_field_preview",
+    "render_delete_field_processing",
 ]

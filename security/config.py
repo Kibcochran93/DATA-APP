@@ -79,11 +79,16 @@ ERROR_MESSAGES: Dict[str, str] = {
 
 
 # File configuration
+# Per SEATS Master Spec:
+# - Manual upload (Admin Site): Max 5MB
+# - SFTP automated transfer: Max 50MB
 FILE_CONFIG: Dict[str, Any] = {
-    'max_size': int(os.getenv('MAX_FILE_SIZE', 10 * 1024 * 1024)),  # 10MB
+    'max_size': int(os.getenv('MAX_FILE_SIZE', 5 * 1024 * 1024)),  # 5MB for manual upload
+    'max_size_sftp': int(os.getenv('MAX_FILE_SIZE_SFTP', 50 * 1024 * 1024)),  # 50MB for SFTP
     'allowed_extensions': {'.csv', '.xlsx', '.xls', '.json'},
     'chunk_size': int(os.getenv('CHUNK_SIZE', 1024 * 1024)),  # 1MB
     'upload_timeout': int(os.getenv('UPLOAD_TIMEOUT', 30)),
+    'require_utf8': True,  # CSV must be UTF-8 per Master Spec
 }
 
 

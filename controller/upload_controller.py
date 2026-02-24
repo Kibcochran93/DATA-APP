@@ -11,6 +11,7 @@ import logging
 
 from utils.debug_logger import setup_logger, log_exception
 from utils.exceptions import ValidationError, SecurityError, DataError
+from utils.seats_data_handler import get_seats_handler
 from security.config import InputValidator
 
 logger = setup_logger(__name__)
@@ -30,19 +31,22 @@ def handle_file_upload(uploaded_file: Any) -> Optional[pd.DataFrame]:
         return None
     
     try:
-        # Initialize validator
+        # Initialize validator and SEATS handler
         validator = InputValidator()
+        seats_handler = get_seats_handler()
         
         # Validate file
         validator.validate_file(uploaded_file)
         
-        # Read file based on extension
+        # Read file based on extension, preserving leading zeros
         filename = uploaded_file.name.lower()
         
         if filename.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
+            # Use SEATS handler to preserve leading zeros in ID fields
+            df = seats_handler.read_csv_preserve_leading_zeros(uploaded_file)
         elif filename.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(uploaded_file)
+            # Use SEATS handler to preserve leading zeros in ID fields
+            df = seats_handler.read_excel_preserve_leading_zeros(uploaded_file)
         elif filename.endswith(".json"):
             df = pd.read_json(uploaded_file)
         else:
@@ -62,11 +66,6 @@ def handle_file_upload(uploaded_file: Any) -> Optional[pd.DataFrame]:
         
         # Sanitize input
         df = validator.sanitize_input(df)
-        
-        # Apply PII masking if protection is available
-        protection = st.session_state.get("protection")
-        if protection and hasattr(protection, "mask_pii"):
-            df = protection.mask_pii(df)
         
         # Store in session state
         st.session_state.df = df
@@ -88,12 +87,12 @@ def handle_file_upload(uploaded_file: Any) -> Optional[pd.DataFrame]:
         
     except ValidationError as e:
         log_exception(e, logger, {"action": "file_upload", "file": uploaded_file.name})
-        st.error(f"Validation error: {str(e)}")
+        st.error(f"Validation error: {e.message}")
         return None
         
     except SecurityError as e:
         log_exception(e, logger, {"action": "file_upload", "file": uploaded_file.name})
-        st.error(f"Security error: {str(e)}")
+        st.error(f"Security error: {e.message}")
         return None
         
     except Exception as e:
