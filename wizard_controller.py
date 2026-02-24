@@ -240,33 +240,94 @@ def render_step_validation(wizard_state: WizardState) -> None:
     else:
         df_mapped = df
     
-    # Run validation
+    # Run validation using SEATS spec
     with st.spinner("Validating data..."):
         try:
-            from utils.validator import validate_dataframe
-            results = validate_dataframe(df_mapped, dataset_type)
-            wizard_state.set_data("validation_results", results)
+            from utils.seats_data_handler import get_seats_handler, load_spec_by_type
+            
+            handler = get_seats_handler()
+            
+            # Try to load spec for dataset type
+            try:
+                spec = load_spec_by_type(dataset_type)
+                results = handler.validate_against_spec(df_mapped, spec)
+                
+                # Convert to display format
+                validation_results = {
+                    "is_valid": results.get("is_valid", False),
+                    "errors": results.get("errors", []),
+                    "warnings": results.get("warnings", []),
+                    "total_errors": len(results.get("errors", [])),
+                    "total_warnings": len(results.get("warnings", [])),
+                }
+                
+            except ValueError:
+                # Spec not found for this dataset type, use basic validation
+                from utils.validator import validate_dataframe
+                results = validate_dataframe(df_mapped, dataset_type)
+                validation_results = results
+            
+            wizard_state.set_data("validation_results", validation_results)
             wizard_state.set_data("dataframe_mapped", df_mapped)
             
             # Display results
-            total_errors = results.get("total_errors", 0)
+            total_errors = validation_results.get("total_errors", 0)
+            total_warnings = validation_results.get("total_warnings", 0)
+            
             if total_errors == 0:
-                st.success("Validation passed! No issues found.")
+                st.success("✅ Validation passed! No critical issues found.")
             else:
-                st.warning(f"Found {total_errors} validation issues.")
+                st.error(f"❌ Found {total_errors} validation errors.")
+            
+            if total_warnings > 0:
+                st.warning(f"⚠️ Found {total_warnings} warnings.")
+            
+            # Display missing mandatory fields
+            errors = validation_results.get("errors", [])
+            missing_mandatory = [e for e in errors if e.get("type") == "missing_mandatory_field"]
+            
+            if missing_mandatory:
+                st.markdown("### Missing Mandatory Columns")
+                st.markdown("The following required columns are missing from your file:")
+                for error in missing_mandatory:
+                    st.markdown(f"- **{error['field']}**")
                 
-                with st.expander("View Issues"):
-                    for error_type, errors in results.items():
-                        if errors and error_type != "total_errors":
-                            st.markdown(f"**{error_type}:**")
-                            for error in errors[:10]:  # Limit display
-                                st.markdown(f"- {error}")
+                # Suggest column mappings
+                st.markdown("### Suggested Fixes")
+                st.markdown("Your file may have columns with different names. Consider mapping:")
+                
+                file_cols = set(df_mapped.columns)
+                suggestions = _suggest_column_mappings(file_cols, [e['field'] for e in missing_mandatory])
+                
+                if suggestions:
+                    for file_col, spec_col in suggestions.items():
+                        st.markdown(f"- `{file_col}` → **{spec_col}**")
+                    st.info("💡 Go back to Header Mapping to fix these column names.")
+                else:
+                    st.warning("Some required columns may need to be added to your data file.")
+            
+            # Display other errors
+            other_errors = [e for e in errors if e.get("type") != "missing_mandatory_field"]
+            if other_errors:
+                with st.expander(f"View Other Issues ({len(other_errors)})"):
+                    for error in other_errors[:20]:
+                        st.markdown(f"- **{error.get('field', 'Unknown')}**: {error.get('message', str(error))}")
+            
+            # Display warnings
+            warnings = validation_results.get("warnings", [])
+            if warnings:
+                with st.expander(f"View Warnings ({len(warnings)})"):
+                    for warning in warnings[:20]:
+                        if isinstance(warning, dict):
+                            st.markdown(f"- **{warning.get('field', 'Unknown')}**: {warning.get('message', str(warning))}")
+                        else:
+                            st.markdown(f"- {warning}")
                                 
         except Exception as e:
             log_exception(e, logger, {"action": "validation"})
             st.error(f"Validation error: {str(e)}")
-            results = {"error": str(e)}
-            wizard_state.set_data("validation_results", results)
+            validation_results = {"error": str(e), "total_errors": 1}
+            wizard_state.set_data("validation_results", validation_results)
     
     col1, col2 = st.columns(2)
     with col1:
@@ -277,6 +338,33 @@ def render_step_validation(wizard_state: WizardState) -> None:
         if st.button("Continue to Auto-Fix", type="primary"):
             wizard_state.next_step()
             st.rerun()
+
+
+def _suggest_column_mappings(file_cols: set, missing_cols: list) -> dict:
+    """Suggest column mappings based on common naming patterns."""
+    suggestions = {}
+    
+    # Common naming variations
+    mapping_patterns = {
+        'COURSE_ID': ['PROGRAM_ID', 'PROGRAMME_ID', 'PROG_ID'],
+        'COURSE_NAME': ['PROGRAM_NAME', 'PROGRAMME_NAME', 'PROG_NAME'],
+        'MODULE_ID': ['CLASS_ID', 'SUBJECT_ID', 'UNIT_ID'],
+        'MODULE_NAME': ['CLASS_NAME', 'SUBJECT_NAME', 'UNIT_NAME'],
+        'SCHOOL_ID': ['DEPARTMENT_ID', 'DEPT_ID', 'FACULTY_ID'],
+        'SCHOOL_NAME': ['DEPARTMENT_NAME', 'DEPT_NAME', 'FACULTY_NAME'],
+        'STUDENT_ID': ['STUDENTID', 'STU_ID', 'STUDENT_NUMBER'],
+        'EVENT_ID': ['EVENTID', 'TIMETABLE_ID', 'SCHEDULE_ID', 'LECTURE_ID'],
+        'STAFF_NUMBER': ['STAFF_ID', 'STAFFID', 'EMPLOYEE_ID'],
+    }
+    
+    for missing_col in missing_cols:
+        if missing_col in mapping_patterns:
+            for pattern in mapping_patterns[missing_col]:
+                if pattern in file_cols:
+                    suggestions[pattern] = missing_col
+                    break
+    
+    return suggestions
 
 
 def render_step_autofix(wizard_state: WizardState) -> None:
