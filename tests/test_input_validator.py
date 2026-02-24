@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from io import BytesIO
-from core.input_validator import InputValidator
-from core.config import FILE_CONFIG, DATA_CONFIG, ERROR_MESSAGES
+from security.config import InputValidator, FILE_CONFIG, DATA_CONFIG, ERROR_MESSAGES
 from utils.exceptions import SecurityError
 
 @pytest.fixture
