@@ -756,18 +756,24 @@ class SEATSDataHandler:
         # Check max_length
         if 'max_length' in field_spec:
             max_len = field_spec['max_length']
-            lengths = series.astype(str).str.len()
-            over_max = lengths > max_len
-            over_count = over_max.sum()
-            
-            if over_count > 0:
-                result['warnings'].append({
-                    'type': 'max_length_exceeded',
-                    'field': field_name,
-                    'message': f"Field '{field_name}' has {over_count} values exceeding max length {max_len}",
-                    'over_count': int(over_count),
-                    'max_length': max_len
-                })
+            # Only check non-null, non-empty values
+            non_null = series.dropna()
+            non_null = non_null[non_null != '']
+            if len(non_null) > 0:
+                lengths = non_null.astype(str).str.len()
+                over_max = lengths > max_len
+                over_count = over_max.sum()
+                
+                if over_count > 0:
+                    over_examples = non_null[over_max].head(3).tolist()
+                    result['warnings'].append({
+                        'type': 'max_length_exceeded',
+                        'field': field_name,
+                        'message': f"Field '{field_name}' has {over_count} values exceeding max length {max_len}",
+                        'over_count': int(over_count),
+                        'max_length': max_len,
+                        'examples': over_examples
+                    })
         
         # Check date format
         if field_type == 'date' and 'format' in field_spec:
