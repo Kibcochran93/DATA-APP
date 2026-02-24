@@ -45,7 +45,11 @@ class WizardState:
     @property
     def current_step(self) -> int:
         """Get current wizard step."""
-        return st.session_state.wizard_step
+        step = st.session_state.get("wizard_step")
+        if step is None:
+            st.session_state.wizard_step = WizardStep.UPLOAD.value
+            return WizardStep.UPLOAD.value
+        return step
     
     @current_step.setter
     def current_step(self, value: int) -> None:
@@ -91,7 +95,7 @@ class WizardState:
 def render_progress_bar(wizard_state: WizardState) -> None:
     """Render wizard progress bar."""
     total_steps = len(WizardStep)
-    current = wizard_state.current_step
+    current = wizard_state.current_step or 1
     progress = current / total_steps
     
     st.progress(progress)
