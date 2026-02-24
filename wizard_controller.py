@@ -431,7 +431,7 @@ def _suggest_column_mappings(file_cols: set, missing_cols: list) -> dict:
         'MODULE_NAME': ['CLASS_NAME', 'SUBJECT_NAME', 'UNIT_NAME'],
         'SCHOOL_ID': ['DEPARTMENT_ID', 'DEPT_ID', 'FACULTY_ID', 'SCHOOL_CODE'],
         'SCHOOL_NAME': ['DEPARTMENT_NAME', 'DEPT_NAME', 'FACULTY_NAME'],
-        'EVENT_ID': ['EVENTID', 'TIMETABLE_ID', 'SCHEDULE_ID', 'LECTURE_ID', 'CLASS_ID'],
+        'EVENT_ID': ['EVENTID', 'TIMETABLE_ID', 'SCHEDULE_ID', 'LECTURE_ID', 'SESSION_ID'],
         
         # Student mappings
         'STUDENT_ID': ['STUDENTID', 'STU_ID', 'STUDENT_NUMBER', 'STUDENT_CODE', 'ID'],
@@ -463,13 +463,17 @@ def _suggest_column_mappings(file_cols: set, missing_cols: list) -> dict:
         'EXTERNAL_KEY': ['EXTERNAL_ID', 'EXT_KEY', 'ACCESS_PROFILE_KEY'],
     }
     
+    # Track which file columns have been used to avoid duplicate mappings
+    used_file_cols = set()
+    
     for missing_col in missing_cols:
         if missing_col in mapping_patterns:
             for pattern in mapping_patterns[missing_col]:
                 # Check case-insensitive
                 for file_col in file_cols:
-                    if file_col.upper() == pattern.upper():
+                    if file_col.upper() == pattern.upper() and file_col not in used_file_cols:
                         suggestions[file_col] = missing_col
+                        used_file_cols.add(file_col)
                         break
                 if missing_col in [v for v in suggestions.values()]:
                     break
