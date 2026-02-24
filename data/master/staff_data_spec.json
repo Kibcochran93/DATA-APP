@@ -2,8 +2,14 @@
   "dataset_type": "Staff",
   "version": "8.2",
   "description": "SEATS Staff Data Interface Specification",
-  "signature": ["STAFF_NUMBER", "FORENAME", "LAST_NAME"],
-  "unique_key": ["STAFF_NUMBER"],
+  "signature": [
+    "STAFF_NUMBER",
+    "FORENAME",
+    "LAST_NAME"
+  ],
+  "unique_key": [
+    "STAFF_NUMBER"
+  ],
   "mandatory_fields": [
     "STAFF_NUMBER",
     "FORENAME",
@@ -28,10 +34,30 @@
       "mandatory": false,
       "max_length": 100,
       "values": [
-        "LECTRR", "PRFSRV", "PRGMAN", "CRSLDR", "MDLLDR", "VSTLEC",
-        "ASSLEC", "SENMAN", "CEOTEA", "HOUPRF", "EXTADV", "EXTEXM",
-        "RESAST", "STDUNI", "ASSLNK", "PENSNR", "OTHER", "TEALDR",
-        "FACSTA", "FINSTA", "HRSTAF", "CUSSTA", "ADMSTA", ""
+        "LECTRR",
+        "PRFSRV",
+        "PRGMAN",
+        "CRSLDR",
+        "MDLLDR",
+        "VSTLEC",
+        "ASSLEC",
+        "SENMAN",
+        "CEOTEA",
+        "HOUPRF",
+        "EXTADV",
+        "EXTEXM",
+        "RESAST",
+        "STDUNI",
+        "ASSLNK",
+        "PENSNR",
+        "OTHER",
+        "TEALDR",
+        "FACSTA",
+        "FINSTA",
+        "HRSTAF",
+        "CUSSTA",
+        "ADMSTA",
+        ""
       ],
       "value_descriptions": {
         "LECTRR": "Lecturer",
@@ -83,8 +109,16 @@
       "type": "enum",
       "mandatory": false,
       "max_length": 5,
-      "values": ["MR", "MS", "MRS", "DR", "PROF", ""],
-      "api_mapping": "Staff.Title"
+      "values": [
+        "MR",
+        "MS",
+        "MRS",
+        "DR",
+        "PROF",
+        ""
+      ],
+      "api_mapping": "Staff.Title",
+      "fixer": "uppercase"
     },
     "GENDER": {
       "position": 6,
@@ -92,13 +126,19 @@
       "type": "enum",
       "mandatory": false,
       "max_length": 1,
-      "values": ["M", "F", "O", ""],
+      "values": [
+        "M",
+        "F",
+        "O",
+        ""
+      ],
       "value_descriptions": {
         "M": "Male",
         "F": "Female",
         "O": "Other"
       },
-      "api_mapping": "Staff.Gender"
+      "api_mapping": "Staff.Gender",
+      "fixer": "uppercase"
     },
     "BADGE_NUMBER": {
       "position": 7,
@@ -185,8 +225,16 @@
     }
   },
   "validation_rules": {
-    "email_fields": ["EMAIL", "UNIVERSITY_EMAIL"],
-    "preserve_leading_zeros": ["STAFF_NUMBER", "BADGE_NUMBER", "TELEPHONE", "EXTERNAL_KEY"],
+    "email_fields": [
+      "EMAIL",
+      "UNIVERSITY_EMAIL"
+    ],
+    "preserve_leading_zeros": [
+      "STAFF_NUMBER",
+      "BADGE_NUMBER",
+      "TELEPHONE",
+      "EXTERNAL_KEY"
+    ],
     "single_value_constraint": {
       "field": "STAFF_TYPE",
       "description": "A staff member can only have one Staff type"
@@ -195,5 +243,22 @@
   "file_constraints": {
     "max_size_manual_upload_mb": 5,
     "max_size_sftp_mb": 50
+  },
+  "import_warnings": {
+    "column_names": {
+      "common_issues": [
+        "STAFF_NUMBER is the correct column name (not STAFF_ID)",
+        "Column names are case-sensitive"
+      ],
+      "notes": "Some systems may export as STAFF_ID - must be renamed to STAFF_NUMBER"
+    },
+    "case_sensitivity": {
+      "fields": [
+        "TITLE",
+        "GENDER"
+      ],
+      "auto_fix": true,
+      "notes": "TITLE and GENDER values will be auto-uppercased (Mr -> MR)"
+    }
   }
 }
