@@ -17,9 +17,11 @@ if not exist "venv" (
 
 REM Set test mode to bypass authentication
 set TEST_MODE=true
+REM Enable debug mode to show errors
+set DEBUG=true
 
 echo.
-echo Starting application in TEST MODE...
+echo Starting application in TEST MODE with DEBUG enabled...
 echo The app will open in your browser at http://localhost:8501
 echo.
 echo Press Ctrl+C to stop the server
