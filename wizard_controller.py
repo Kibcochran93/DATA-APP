@@ -35,12 +35,17 @@ class WizardState:
     
     def _initialize_state(self) -> None:
         """Initialize wizard state in session."""
-        if "wizard_step" not in st.session_state:
+        if "wizard_step" not in st.session_state or st.session_state.wizard_step is None:
             st.session_state.wizard_step = WizardStep.UPLOAD.value
-        if "wizard_data" not in st.session_state:
+        if "wizard_data" not in st.session_state or st.session_state.wizard_data is None:
             st.session_state.wizard_data = {}
-        if "wizard_history" not in st.session_state:
+        if "wizard_history" not in st.session_state or st.session_state.wizard_history is None:
             st.session_state.wizard_history = []
+    
+    def _ensure_data_dict(self) -> None:
+        """Ensure wizard_data is a dictionary."""
+        if st.session_state.get("wizard_data") is None:
+            st.session_state.wizard_data = {}
     
     @property
     def current_step(self) -> int:
@@ -59,14 +64,17 @@ class WizardState:
     @property
     def data(self) -> Dict[str, Any]:
         """Get wizard data."""
+        self._ensure_data_dict()
         return st.session_state.wizard_data
     
     def set_data(self, key: str, value: Any) -> None:
         """Set wizard data value."""
+        self._ensure_data_dict()
         st.session_state.wizard_data[key] = value
     
     def get_data(self, key: str, default: Any = None) -> Any:
         """Get wizard data value."""
+        self._ensure_data_dict()
         return st.session_state.wizard_data.get(key, default)
     
     def next_step(self) -> None:
