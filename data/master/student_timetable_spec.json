@@ -2,8 +2,15 @@
   "dataset_type": "StudentTimetable",
   "version": "8.2",
   "description": "SEATS Full Student Timetable Interface Specification",
-  "signature": ["EVENT_ID", "DAY", "STUDENT_ID"],
-  "unique_key": ["EVENT_ID", "DAY"],
+  "signature": [
+    "EVENT_ID",
+    "DAY",
+    "STUDENT_ID"
+  ],
+  "unique_key": [
+    "EVENT_ID",
+    "DAY"
+  ],
   "unique_key_notes": "EventId and Date make up the unique identifier for a scheduled class. Students scheduled on the same class should have a row per Student against the same EventId and Date.",
   "mandatory_fields": [
     "EVENT_ID",
@@ -149,11 +156,58 @@
       "max_length": 3,
       "default": "L",
       "values": [
-        "L", "S", "X", "P", "W", "T", "PR", "ST", "V", "A", "F", "LA", "DI",
-        "CA", "CO", "CR", "O", "R", "FS", "I", "M", "PL", "PRE", "RE", "AS",
-        "STU", "AR", "AU", "AC", "CL", "CLS", "DU", "MDT", "OOH", "PRS", "RS",
-        "SM", "TH", "TO", "WA", "XRY", "LCS", "OPT", "OR", "SCR", "WR", "EX",
-        "FIS", "PBL", "SPL", "SSM", "HYB"
+        "L",
+        "S",
+        "X",
+        "P",
+        "W",
+        "T",
+        "PR",
+        "ST",
+        "V",
+        "A",
+        "F",
+        "LA",
+        "DI",
+        "CA",
+        "CO",
+        "CR",
+        "O",
+        "R",
+        "FS",
+        "I",
+        "M",
+        "PL",
+        "PRE",
+        "RE",
+        "AS",
+        "STU",
+        "AR",
+        "AU",
+        "AC",
+        "CL",
+        "CLS",
+        "DU",
+        "MDT",
+        "OOH",
+        "PRS",
+        "RS",
+        "SM",
+        "TH",
+        "TO",
+        "WA",
+        "XRY",
+        "LCS",
+        "OPT",
+        "OR",
+        "SCR",
+        "WR",
+        "EX",
+        "FIS",
+        "PBL",
+        "SPL",
+        "SSM",
+        "HYB"
       ],
       "value_descriptions": {
         "L": "Lecture",
@@ -243,7 +297,10 @@
       "multi_value": true,
       "separator": "/",
       "api_mapping": "Location.Code (type = site)",
-      "dependency": ["BUILDING_ID", "ROOM_ID"],
+      "dependency": [
+        "BUILDING_ID",
+        "ROOM_ID"
+      ],
       "notes": "If sending multiple instances, separate by forward slash. If you include a site you must include a building and room."
     },
     "SITE_NAME": {
@@ -255,7 +312,10 @@
       "multi_value": true,
       "separator": "/",
       "api_mapping": "Location.Name (type = site)",
-      "dependency": ["BUILDING_NAME", "ROOM_NAME"],
+      "dependency": [
+        "BUILDING_NAME",
+        "ROOM_NAME"
+      ],
       "notes": "If sending multiple instances, separate by forward slash. If you include a site you must include a building and room."
     },
     "TUTOR_ID": {
@@ -279,7 +339,9 @@
       "multi_value": true,
       "separator": "/",
       "api_mapping": "Staff.Surname, Staff.FirstName",
-      "dependency": ["TUTOR_ID"],
+      "dependency": [
+        "TUTOR_ID"
+      ],
       "notes": "If sent, data must be sent for TUTOR_ID. Multiple tutors separated by forward slash. Name parsing: comma splits Surname first, space/dot splits FirstName first."
     },
     "STUDENT_ID": {
@@ -311,7 +373,10 @@
       "multi_value": true,
       "separator": "/",
       "api_mapping": "Location.Code (type = building)",
-      "dependency": ["SITE_CODE", "ROOM_ID"],
+      "dependency": [
+        "SITE_CODE",
+        "ROOM_ID"
+      ],
       "notes": "If sending multiple instances, separate by forward slash. If you include a building you must include a site and room."
     },
     "BUILDING_NAME": {
@@ -323,7 +388,10 @@
       "multi_value": true,
       "separator": "/",
       "api_mapping": "Location.Name (type = building)",
-      "dependency": ["SITE_NAME", "ROOM_NAME"],
+      "dependency": [
+        "SITE_NAME",
+        "ROOM_NAME"
+      ],
       "notes": "If sending multiple instances, separate by forward slash. If you include a building you must include a site and room."
     },
     "GROUP_ID": {
@@ -355,7 +423,10 @@
       "mandatory": false,
       "max_length": 1,
       "default": "Y",
-      "values": ["Y", "N"],
+      "values": [
+        "Y",
+        "N"
+      ],
       "workflow_constraint": true,
       "api_mapping": "Schedule.IsMandatory",
       "notes": "Default is Mandatory (Y). Non-Mandatory events do not contribute to Student's Overall Attendance %. Non-Mandatory % represented on Student Calendar within Attendance Dial."
@@ -366,7 +437,12 @@
       "type": "enum",
       "mandatory": false,
       "max_length": 100,
-      "values": ["", "MarkedAsAbsent", "MarkedAsLate", "MarkedAsAttended"],
+      "values": [
+        "",
+        "MarkedAsAbsent",
+        "MarkedAsLate",
+        "MarkedAsAttended"
+      ],
       "notes": "This field must be empty except for specific cases. Sets attendance status of student. Usually empty - SEAtS manages attendance automatically based on swipes. Only used for clients that already have attendance data at source."
     },
     "CLASSLINK": {
@@ -384,7 +460,10 @@
       "type": "enum",
       "mandatory": false,
       "max_length": 1,
-      "values": ["Y", "N"],
+      "values": [
+        "Y",
+        "N"
+      ],
       "case_sensitive": true,
       "notes": "Accepts Y or N (case sensitive). If Y on a student within a timetable event, student is removed. If Y for all students in event, students and timetable are removed. Backend config must be enabled first."
     },
@@ -394,7 +473,11 @@
       "type": "enum",
       "mandatory": false,
       "max_length": 1,
-      "values": ["Y", "N", ""],
+      "values": [
+        "Y",
+        "N",
+        ""
+      ],
       "notes": "If Y, attendance status updates are applied for timetable if it has a classlink. Translates to 'Virtual Attendance' checkbox on Add/Edit Lecture Screen."
     },
     "MODULE_GROUP": {
@@ -415,56 +498,122 @@
     }
   },
   "validation_rules": {
-    "date_fields": ["DAY"],
-    "time_fields": ["START_TIME", "END_TIME"],
+    "date_fields": [
+      "DAY"
+    ],
+    "time_fields": [
+      "START_TIME",
+      "END_TIME"
+    ],
     "cross_file_match_fields": [
-      "SCHOOL_ID", "SCHOOL_NAME", "COURSE_ID", "COURSE_NAME",
-      "MODULE_ID", "MODULE_NAME", "MODULE_GROUP", "STUDENT_ID"
+      "SCHOOL_ID",
+      "SCHOOL_NAME",
+      "COURSE_ID",
+      "COURSE_NAME",
+      "MODULE_ID",
+      "MODULE_NAME",
+      "MODULE_GROUP",
+      "STUDENT_ID"
     ],
     "preserve_leading_zeros": [
-      "EVENT_ID", "ROOM_ID", "COURSE_ID", "COURSE_SESSION_CODE",
-      "MODULE_ID", "MODULE_SESSION_CODE", "SCHOOL_ID", "SITE_CODE",
-      "TUTOR_ID", "STUDENT_ID", "BUILDING_ID", "GROUP_ID"
+      "EVENT_ID",
+      "ROOM_ID",
+      "COURSE_ID",
+      "COURSE_SESSION_CODE",
+      "MODULE_ID",
+      "MODULE_SESSION_CODE",
+      "SCHOOL_ID",
+      "SITE_CODE",
+      "TUTOR_ID",
+      "STUDENT_ID",
+      "BUILDING_ID",
+      "GROUP_ID"
     ],
     "multi_value_forward_slash": [
-      "ROOM_ID", "ROOM_NAME", "SITE_CODE", "SITE_NAME",
-      "TUTOR_ID", "TUTOR", "BUILDING_ID", "BUILDING_NAME",
-      "GROUP_ID", "GROUP_NAME"
+      "ROOM_ID",
+      "ROOM_NAME",
+      "SITE_CODE",
+      "SITE_NAME",
+      "TUTOR_ID",
+      "TUTOR",
+      "BUILDING_ID",
+      "BUILDING_NAME",
+      "GROUP_ID",
+      "GROUP_NAME"
     ],
     "location_hierarchy": {
       "description": "If you include a SITE you must include a BUILDING and a ROOM",
       "rules": [
         {
-          "if_present": ["SITE_CODE"],
-          "require": ["BUILDING_ID", "ROOM_ID"]
+          "if_present": [
+            "SITE_CODE"
+          ],
+          "require": [
+            "BUILDING_ID",
+            "ROOM_ID"
+          ]
         },
         {
-          "if_present": ["SITE_NAME"],
-          "require": ["BUILDING_NAME", "ROOM_NAME"]
+          "if_present": [
+            "SITE_NAME"
+          ],
+          "require": [
+            "BUILDING_NAME",
+            "ROOM_NAME"
+          ]
         },
         {
-          "if_present": ["BUILDING_ID"],
-          "require": ["SITE_CODE", "ROOM_ID"]
+          "if_present": [
+            "BUILDING_ID"
+          ],
+          "require": [
+            "SITE_CODE",
+            "ROOM_ID"
+          ]
         },
         {
-          "if_present": ["BUILDING_NAME"],
-          "require": ["SITE_NAME", "ROOM_NAME"]
+          "if_present": [
+            "BUILDING_NAME"
+          ],
+          "require": [
+            "SITE_NAME",
+            "ROOM_NAME"
+          ]
         }
       ]
     },
     "tutor_dependency": {
       "description": "If TUTOR is sent, TUTOR_ID must also be sent",
-      "if_present": ["TUTOR"],
-      "require": ["TUTOR_ID"]
+      "if_present": [
+        "TUTOR"
+      ],
+      "require": [
+        "TUTOR_ID"
+      ]
     },
     "multi_value_consistency": {
       "description": "Fields supporting multiple values must be populated consistently on every row for a specific timetable event",
       "field_groups": [
-        ["ROOM_ID", "ROOM_NAME"],
-        ["BUILDING_ID", "BUILDING_NAME"],
-        ["SITE_CODE", "SITE_NAME"],
-        ["TUTOR_ID", "TUTOR"],
-        ["GROUP_ID", "GROUP_NAME"]
+        [
+          "ROOM_ID",
+          "ROOM_NAME"
+        ],
+        [
+          "BUILDING_ID",
+          "BUILDING_NAME"
+        ],
+        [
+          "SITE_CODE",
+          "SITE_NAME"
+        ],
+        [
+          "TUTOR_ID",
+          "TUTOR"
+        ],
+        [
+          "GROUP_ID",
+          "GROUP_NAME"
+        ]
       ],
       "notes": "Every row for every Student (for each unique event) should always be populated with the same consistent data."
     }
@@ -486,11 +635,41 @@
     "delta_handling": {
       "description": "Delta handling for timetable updates",
       "behavior": "When enabled, if a Timetable file is imported with classes for future dates, the system determines what students are linked to the classid/date and removes only students not present in the latest file. Students still in the class remain so attendance is not affected.",
-      "key_fields": ["EVENT_ID", "DAY"]
+      "key_fields": [
+        "EVENT_ID",
+        "DAY"
+      ]
     }
   },
   "file_constraints": {
     "max_size_manual_upload_mb": 5,
     "max_size_sftp_mb": 50
+  },
+  "import_warnings": {
+    "column_names": {
+      "common_issues": [
+        "Excel may add trailing whitespace to column names",
+        "Column names are case-sensitive",
+        "Recommendation: Trim column headers before import"
+      ],
+      "auto_fix": true,
+      "notes": "System will strip whitespace from column names"
+    },
+    "multi_value_fields": {
+      "separator": "/",
+      "fields": [
+        "ROOM_ID",
+        "ROOM_NAME",
+        "SITE_CODE",
+        "SITE_NAME",
+        "TUTOR_ID",
+        "TUTOR",
+        "BUILDING_ID",
+        "BUILDING_NAME",
+        "GROUP_ID",
+        "GROUP_NAME"
+      ],
+      "notes": "Multiple values should be separated by forward-slash with optional spaces"
+    }
   }
 }
