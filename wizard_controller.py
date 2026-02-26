@@ -701,8 +701,11 @@ def run_wizard() -> None:
     Run the data validation wizard.
     
     Main entry point for the wizard workflow.
-    Detects if data was pre-loaded from the Data Upload page.
-    Syncs wizard data back to session state for other pages.
+    Handles multiple entry scenarios:
+    - Fresh start (no data) -> Step 1
+    - Pre-loaded from Data Upload -> Skip to Step 2
+    - Return mid-wizard -> Resume at last step
+    - Session lost mid-wizard -> Reset to Step 1
     """
     st.title("Data Validation Wizard")
     st.markdown("---")
@@ -712,6 +715,13 @@ def run_wizard() -> None:
     # Check if data was pre-loaded from Data Upload page
     pre_loaded_df = st.session_state.get("df")
     wizard_df = wizard_state.get_data("dataframe")
+    
+    # SAFEGUARD: If we're past step 1 but have no data, reset to step 1
+    # This handles browser refresh / session loss scenarios
+    if wizard_state.current_step > WizardStep.UPLOAD.value and wizard_df is None and pre_loaded_df is None:
+        st.warning("Session data was lost. Please upload your data again.")
+        wizard_state.reset()
+        st.rerun()
     
     # If we have pre-loaded data but wizard doesn't have it yet, transfer it
     if pre_loaded_df is not None and wizard_df is None:

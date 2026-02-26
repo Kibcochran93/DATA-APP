@@ -245,6 +245,31 @@ def render_data_upload() -> None:
     """Render the data upload page."""
     st.header("Data Upload")
     
+    # Check if there's existing data in session or wizard
+    existing_df = st.session_state.get("df")
+    wizard_data = st.session_state.get("wizard_data", {})
+    wizard_df = wizard_data.get("dataframe") if wizard_data else None
+    wizard_step = st.session_state.get("wizard_step", 1)
+    
+    # Show info about existing data/wizard progress
+    if wizard_df is not None and wizard_step > 1:
+        st.info(f"You have a wizard session in progress (Step {wizard_step}/7).")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Continue Wizard", type="primary"):
+                st.query_params["page"] = "Wizard"
+                st.rerun()
+        with col2:
+            if st.button("Start Fresh (Reset Wizard)"):
+                st.session_state.wizard_step = 1
+                st.session_state.wizard_data = {}
+                st.session_state.wizard_history = []
+                st.session_state.df = None
+                st.rerun()
+        st.markdown("---")
+    elif existing_df is not None:
+        st.info(f"You have data loaded ({len(existing_df)} rows). Upload a new file to replace it.")
+    
     uploaded_file = file_uploader(
         label="Upload your data file",
         allowed_types=["csv", "xlsx", "xls", "json"],
@@ -260,11 +285,22 @@ def render_data_upload() -> None:
             st.subheader("Data Preview")
             st.dataframe(df.head(10))
             
-            # Option to proceed to wizard
-            if st.button("Proceed to Validation Wizard", type="primary"):
-                st.session_state.df = df
-                st.query_params["page"] = "Wizard"
-                st.rerun()
+            # Options to proceed
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Proceed to Validation Wizard", type="primary"):
+                    # Reset wizard state for new data
+                    st.session_state.wizard_step = 1
+                    st.session_state.wizard_data = {}
+                    st.session_state.wizard_history = []
+                    st.session_state.df = df
+                    st.query_params["page"] = "Wizard"
+                    st.rerun()
+            with col2:
+                if st.button("Go to Data Analysis"):
+                    st.session_state.df = df
+                    st.query_params["page"] = "Data Analysis"
+                    st.rerun()
 
 
 def render_data_analysis() -> None:
@@ -275,9 +311,16 @@ def render_data_analysis() -> None:
     
     if df is None or (hasattr(df, 'empty') and df.empty):
         st.info("No data loaded. Please upload a file first.")
-        if st.button("Go to Upload"):
-            st.query_params["page"] = "Data Upload"
-            st.rerun()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Go to Data Upload", type="primary"):
+                st.query_params["page"] = "Data Upload"
+                st.rerun()
+        with col2:
+            if st.button("Go to Wizard"):
+                st.query_params["page"] = "Wizard"
+                st.rerun()
         return
     
     # Display validation results if available
