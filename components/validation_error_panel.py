@@ -328,7 +328,7 @@ class ValidationErrorPanel:
         # Display with Streamlit
         st.dataframe(
             styled_df,
-            use_container_width=True,
+            width='stretch',
             height=400
         )
         
