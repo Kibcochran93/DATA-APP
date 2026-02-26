@@ -648,11 +648,26 @@ def run_wizard() -> None:
     Run the data validation wizard.
     
     Main entry point for the wizard workflow.
+    Detects if data was pre-loaded from the Data Upload page.
     """
     st.title("Data Validation Wizard")
     st.markdown("---")
     
     wizard_state = WizardState()
+    
+    # Check if data was pre-loaded from Data Upload page
+    pre_loaded_df = st.session_state.get("df")
+    wizard_df = wizard_state.get_data("dataframe")
+    
+    # If we have pre-loaded data but wizard doesn't have it yet, transfer it
+    if pre_loaded_df is not None and wizard_df is None:
+        wizard_state.set_data("dataframe", pre_loaded_df)
+        wizard_state.set_data("filename", "Uploaded from Data Upload page")
+        wizard_state.set_data("original_columns", pre_loaded_df.columns.tolist())
+        # Skip to dataset selection step
+        if wizard_state.current_step == WizardStep.UPLOAD.value:
+            wizard_state.current_step = WizardStep.DATASET_SELECT.value
+            st.rerun()
     
     # Render progress bar
     render_progress_bar(wizard_state)
