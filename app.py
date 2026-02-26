@@ -187,6 +187,7 @@ def check_redis_connection(max_retries: int = 3, retry_interval: int = 2) -> boo
     
     This is optional - the application will work without Redis.
     Redis is used for caching and session management in Docker deployments.
+    Only logs on first check to avoid log spam on Streamlit reruns.
     
     Args:
         max_retries: Maximum number of connection attempts
@@ -195,14 +196,21 @@ def check_redis_connection(max_retries: int = 3, retry_interval: int = 2) -> boo
     Returns:
         bool: True if Redis is connected, False otherwise
     """
+    # Only log once per session to avoid spam
+    already_logged = st.session_state.get('_redis_log_done', False)
+    
     if not REDIS_AVAILABLE:
-        logger.info("Redis module not installed - running without Redis support")
+        if not already_logged:
+            logger.info("Redis module not installed - running without Redis support")
+            st.session_state._redis_log_done = True
         return False
     
     # Check if Redis is enabled via environment
     redis_enabled = os.getenv('REDIS_ENABLED', 'false').lower() == 'true'
     if not redis_enabled:
-        logger.info("Redis disabled via REDIS_ENABLED environment variable")
+        if not already_logged:
+            logger.info("Redis disabled via REDIS_ENABLED environment variable")
+            st.session_state._redis_log_done = True
         return False
     
     redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
@@ -211,17 +219,23 @@ def check_redis_connection(max_retries: int = 3, retry_interval: int = 2) -> boo
         try:
             r = redis.from_url(redis_url)
             r.ping()
-            logger.info(f"Successfully connected to Redis at {redis_url}")
+            if not already_logged:
+                logger.info(f"Successfully connected to Redis at {redis_url}")
+                st.session_state._redis_log_done = True
             return True
         except redis.ConnectionError:
             if i < max_retries - 1:
                 logger.warning(f"Redis connection attempt {i+1} failed. Retrying in {retry_interval} seconds...")
                 time.sleep(retry_interval)
             else:
-                logger.warning("Could not connect to Redis - continuing without Redis support")
+                if not already_logged:
+                    logger.warning("Could not connect to Redis - continuing without Redis support")
+                    st.session_state._redis_log_done = True
                 return False
         except Exception as e:
-            logger.warning(f"Redis error: {str(e)} - continuing without Redis support")
+            if not already_logged:
+                logger.warning(f"Redis error: {str(e)} - continuing without Redis support")
+                st.session_state._redis_log_done = True
             return False
     
     return False
