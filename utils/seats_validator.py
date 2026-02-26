@@ -107,14 +107,27 @@ def load_master_spec(dataset_type: str, spec_path: Optional[str] = None) -> Dict
     # Normalize dataset type for file paths
     dataset_lower = dataset_type.lower().replace(" ", "")
     
+    # Map common names to actual spec file names
+    spec_file_map = {
+        "timetable": "student_timetable_spec.json",
+        "studenttimetable": "student_timetable_spec.json",
+        "student": "student_data_spec.json",
+        "staff": "staff_data_spec.json",
+    }
+    
+    spec_filename = spec_file_map.get(dataset_lower, f"{dataset_lower}_spec.json")
+    
     # Default paths to search for spec files
     search_paths = [
         Path(spec_path) if spec_path else None,
-        Path(f"/app/data/master/{dataset_type}/master_{dataset_lower}_spec.json"),
-        Path(f"/app/data/master/{dataset_lower}/master_{dataset_lower}_spec.json"),
-        Path(f"data/master/{dataset_type}/master_{dataset_lower}_spec.json"),
-        Path(f"data/master/{dataset_lower}/master_{dataset_lower}_spec.json"),
-        Path(f"./data/master/{dataset_type}/master_{dataset_lower}_spec.json"),
+        Path(f"/app/data/master/{spec_filename}"),
+        Path(f"/app/data/master/{dataset_type}/{spec_filename}"),
+        Path(f"data/master/{spec_filename}"),
+        Path(f"data/master/{dataset_type}/{spec_filename}"),
+        Path(f"./data/master/{spec_filename}"),
+        # Also try with master_ prefix
+        Path(f"/app/data/master/master_{dataset_lower}_spec.json"),
+        Path(f"data/master/master_{dataset_lower}_spec.json"),
     ]
     
     for path in search_paths:
@@ -187,12 +200,30 @@ class SEATSValidator:
         self.spec_version = self.spec.get("version", "unknown")
         
         # Handle different spec formats
-        if "signature" in self.spec and "mandatory" in self.spec:
-            # New format: signature list + mandatory dict
+        if "mandatory_fields" in self.spec:
+            # Format used by actual SEATS spec files: mandatory_fields list + fields dict
+            self.mandatory_columns = self.spec.get("mandatory_fields", [])
+            all_fields = list(self.spec.get("fields", {}).keys())
+            self.optional_columns = [f for f in all_fields if f not in self.mandatory_columns]
+            
+            # Extract format rules from fields dict
+            self.format_rules = {}
+            for field_name, field_info in self.spec.get("fields", {}).items():
+                if isinstance(field_info, dict):
+                    self.format_rules[field_name] = {
+                        "type": field_info.get("type", "str"),
+                        "format": field_info.get("format"),
+                        "pattern": field_info.get("pattern"),
+                        "values": field_info.get("values", field_info.get("enum_values", [])),
+                        "max_length": field_info.get("max_length"),
+                    }
+        elif "signature" in self.spec and "mandatory" in self.spec:
+            # Alternative format: signature list + mandatory dict
             signature = self.spec.get("signature", [])
             mandatory_dict = self.spec.get("mandatory", {})
             self.mandatory_columns = [f for f in signature if mandatory_dict.get(f, "N") == "Y"]
             self.optional_columns = [f for f in signature if mandatory_dict.get(f, "N") != "Y"]
+            self.format_rules = self.spec.get("formats", {})
         elif "datasets" in self.spec and self.dataset_type in self.spec["datasets"]:
             # Nested format with datasets key
             dataset_spec = self.spec["datasets"][self.dataset_type]
@@ -201,23 +232,25 @@ class SEATSValidator:
             self.mandatory_columns = [f for f in signature if mandatory_dict.get(f, "N") == "Y"]
             self.optional_columns = [f for f in signature if mandatory_dict.get(f, "N") != "Y"]
             self.spec = dataset_spec
+            self.format_rules = self.spec.get("formats", {})
         elif "mandatory" in self.spec and isinstance(self.spec["mandatory"], list):
             # Legacy format: direct lists
             self.mandatory_columns = self.spec.get("mandatory", [])
             self.optional_columns = self.spec.get("optional", [])
+            self.format_rules = self.spec.get("formats", {})
         else:
             # No spec found - use empty lists
             self.mandatory_columns = []
             self.optional_columns = []
-        
-        # Get format rules from spec
-        self.format_rules = self.spec.get("formats", {})
+            self.format_rules = {}
         
         # Build enum values lookup from format rules
         self.enum_values = {}
         for field, rule in self.format_rules.items():
-            if isinstance(rule, dict) and rule.get("type") == "enum":
-                self.enum_values[field.upper()] = rule.get("values", [])
+            if isinstance(rule, dict):
+                values = rule.get("values", [])
+                if values:
+                    self.enum_values[field.upper()] = values
     
     def validate(self, df: pd.DataFrame) -> ValidationResult:
         """
@@ -405,8 +438,8 @@ class SEATSValidator:
         
         # Get expected format from spec or use default
         format_rule = self._get_format_rule(field)
-        expected_format = format_rule.get("format", self.DEFAULT_DATE_FORMAT)
-        pattern = format_rule.get("pattern", self.DEFAULT_DATE_PATTERN)
+        expected_format = format_rule.get("format") if format_rule.get("format") else self.DEFAULT_DATE_FORMAT
+        pattern = format_rule.get("pattern") if format_rule.get("pattern") else self.DEFAULT_DATE_PATTERN
         
         if pd.isna(value) or str(value).strip() == "":
             if self._is_field_mandatory(field):
@@ -462,8 +495,8 @@ class SEATSValidator:
         value = self._get_column_value(row, col_map, field)
         
         format_rule = self._get_format_rule(field)
-        expected_format = format_rule.get("format", self.DEFAULT_TIME_FORMAT)
-        pattern = format_rule.get("pattern", self.DEFAULT_TIME_PATTERN)
+        expected_format = format_rule.get("format") if format_rule.get("format") else self.DEFAULT_TIME_FORMAT
+        pattern = format_rule.get("pattern") if format_rule.get("pattern") else self.DEFAULT_TIME_PATTERN
         
         if pd.isna(value) or str(value).strip() == "":
             # Check for virtual/distance lessons
