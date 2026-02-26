@@ -101,12 +101,25 @@ class WizardState:
 
 
 def render_progress_bar(wizard_state: WizardState) -> None:
-    """Render wizard progress bar."""
+    """Render wizard progress bar with reset option."""
     total_steps = len(WizardStep)
     current = wizard_state.current_step or 1
     progress = current / total_steps
     
-    st.progress(progress)
+    # Progress bar and reset button in same row
+    col_progress, col_reset = st.columns([5, 1])
+    
+    with col_progress:
+        st.progress(progress)
+    
+    with col_reset:
+        if current > 1:  # Only show reset if not on first step
+            if st.button("🔄 Reset", help="Start wizard from the beginning"):
+                wizard_state.reset()
+                # Also clear pre-loaded data reference
+                if "df" in st.session_state:
+                    st.session_state.df = None
+                st.rerun()
     
     # Step labels
     cols = st.columns(total_steps)
@@ -591,15 +604,47 @@ def render_step_review(wizard_state: WizardState) -> None:
 
 
 def render_step_export(wizard_state: WizardState) -> None:
-    """Render export step."""
+    """Render export step with validation warning."""
     st.subheader("Step 7: Export Data")
     
     df = wizard_state.get_data("dataframe_final")
+    validation_results = wizard_state.get_data("validation_results", {})
     
     if df is None:
         st.error("No data to export.")
         return
     
+    # Check for validation errors
+    total_errors = validation_results.get("total_errors", 0)
+    has_errors = total_errors > 0
+    
+    # Show warning if there are validation errors
+    if has_errors:
+        st.warning(f"⚠️ This data has {total_errors} validation error(s) that were not fixed.")
+        
+        # Use session state to track if user acknowledged the warning
+        warning_key = "export_warning_acknowledged"
+        if warning_key not in st.session_state:
+            st.session_state[warning_key] = False
+        
+        if not st.session_state[warning_key]:
+            st.error("Please acknowledge the warning before exporting.")
+            if st.button("I understand, proceed with export anyway", type="secondary"):
+                st.session_state[warning_key] = True
+                st.rerun()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Back to Review"):
+                    wizard_state.previous_step()
+                    st.rerun()
+            with col2:
+                if st.button("Back to Auto-Fix"):
+                    wizard_state.current_step = WizardStep.AUTO_FIX.value
+                    st.rerun()
+            return
+    
+    # Export options
     export_format = st.selectbox(
         "Export Format",
         options=["CSV", "Excel", "JSON"]
@@ -634,11 +679,19 @@ def render_step_export(wizard_state: WizardState) -> None:
             
             st.success("Export ready! Click the download button above.")
             
+            # Reset warning acknowledgment for next time
+            if "export_warning_acknowledged" in st.session_state:
+                del st.session_state["export_warning_acknowledged"]
+            
         except Exception as e:
             log_exception(e, logger, {"action": "export"})
             st.error(f"Export error: {str(e)}")
     
+    st.markdown("---")
     if st.button("Start Over"):
+        # Reset warning acknowledgment
+        if "export_warning_acknowledged" in st.session_state:
+            del st.session_state["export_warning_acknowledged"]
         wizard_state.reset()
         st.rerun()
 
@@ -649,6 +702,7 @@ def run_wizard() -> None:
     
     Main entry point for the wizard workflow.
     Detects if data was pre-loaded from the Data Upload page.
+    Syncs wizard data back to session state for other pages.
     """
     st.title("Data Validation Wizard")
     st.markdown("---")
@@ -668,6 +722,22 @@ def run_wizard() -> None:
         if wizard_state.current_step == WizardStep.UPLOAD.value:
             wizard_state.current_step = WizardStep.DATASET_SELECT.value
             st.rerun()
+    
+    # Sync wizard data back to session state for Data Analysis page
+    final_df = wizard_state.get_data("dataframe_final")
+    if final_df is not None:
+        st.session_state.df = final_df
+    elif wizard_state.get_data("dataframe_fixed") is not None:
+        st.session_state.df = wizard_state.get_data("dataframe_fixed")
+    elif wizard_state.get_data("dataframe_mapped") is not None:
+        st.session_state.df = wizard_state.get_data("dataframe_mapped")
+    elif wizard_df is not None:
+        st.session_state.df = wizard_df
+    
+    # Sync validation results
+    validation_results = wizard_state.get_data("validation_results")
+    if validation_results:
+        st.session_state.validation_results = validation_results
     
     # Render progress bar
     render_progress_bar(wizard_state)
