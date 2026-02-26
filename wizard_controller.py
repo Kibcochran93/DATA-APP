@@ -301,7 +301,7 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
 
 
 def render_step_validation(wizard_state: WizardState) -> None:
-    """Render validation step."""
+    """Render validation step with row-level error flagging for all dataset types."""
     st.subheader("Step 4: Validate Data")
     
     df = wizard_state.get_data("dataframe")
@@ -318,89 +318,47 @@ def render_step_validation(wizard_state: WizardState) -> None:
     else:
         df_mapped = df
     
-    # Run validation using SEATS spec
-    with st.spinner("Validating data..."):
+    # Run validation using SEATS Master Spec with row-level error detection
+    with st.spinner(f"Validating {dataset_type} data against SEATS Master Spec..."):
         try:
-            from utils.seats_data_handler import get_seats_handler, load_spec_by_type
+            from utils.seats_validator import validate_dataset
+            from components.validation_error_panel import render_validation_panel, export_errors_to_csv
             
-            handler = get_seats_handler()
+            # Run validation against Master Spec
+            validation_result = validate_dataset(df_mapped, dataset_type)
             
-            # Try to load spec for dataset type
-            try:
-                spec = load_spec_by_type(dataset_type)
-                results = handler.validate_against_spec(df_mapped, spec)
-                
-                # Convert to display format
-                validation_results = {
-                    "is_valid": results.get("is_valid", False),
-                    "errors": results.get("errors", []),
-                    "warnings": results.get("warnings", []),
-                    "total_errors": len(results.get("errors", [])),
-                    "total_warnings": len(results.get("warnings", [])),
-                }
-                
-            except ValueError:
-                # Spec not found for this dataset type, use basic validation
-                from utils.validator import validate_dataframe
-                results = validate_dataframe(df_mapped, dataset_type)
-                validation_results = results
-            
-            wizard_state.set_data("validation_results", validation_results)
+            # Store validation result for later steps
+            wizard_state.set_data("validation_result", validation_result)
             wizard_state.set_data("dataframe_mapped", df_mapped)
             
-            # Display results
-            total_errors = validation_results.get("total_errors", 0)
-            total_warnings = validation_results.get("total_warnings", 0)
+            # Convert to legacy format for compatibility with other steps
+            validation_results = {
+                "is_valid": validation_result.to_summary()["total_errors"] == 0,
+                "errors": [e.to_dict() for e in validation_result.errors],
+                "warnings": validation_result.warnings,
+                "schema_issues": validation_result.schema_issues,
+                "total_errors": validation_result.to_summary()["total_errors"],
+                "total_warnings": len(validation_result.warnings),
+                "rows_affected": validation_result.to_summary()["rows_affected"],
+            }
+            wizard_state.set_data("validation_results", validation_results)
             
-            if total_errors == 0:
-                st.success("✅ Validation passed! No critical issues found.")
-            else:
-                st.error(f"❌ Found {total_errors} validation errors.")
+            # Render the validation error panel with cell highlighting
+            render_validation_panel(
+                df=df_mapped,
+                validation_result=validation_result,
+                key_prefix=f"wizard_{dataset_type.lower().replace(' ', '_')}"
+            )
             
-            if total_warnings > 0:
-                st.warning(f"⚠️ Found {total_warnings} warnings.")
+            # Export option
+            st.markdown("---")
+            export_errors_to_csv(validation_result, f"{dataset_type.lower().replace(' ', '_')}_validation_errors.csv")
             
-            # Display missing mandatory fields
-            errors = validation_results.get("errors", [])
-            missing_mandatory = [e for e in errors if e.get("type") == "missing_mandatory_field"]
+        except ImportError as e:
+            # Fallback to existing validation if new validator not available
+            log_exception(e, logger, {"action": "import_validator"})
+            _render_legacy_validation(wizard_state, df_mapped, dataset_type)
             
-            if missing_mandatory:
-                st.markdown("### Missing Mandatory Columns")
-                st.markdown("The following required columns are missing from your file:")
-                for error in missing_mandatory:
-                    st.markdown(f"- **{error['field']}**")
-                
-                # Suggest column mappings
-                st.markdown("### Suggested Fixes")
-                st.markdown("Your file may have columns with different names. Consider mapping:")
-                
-                file_cols = set(df_mapped.columns)
-                suggestions = _suggest_column_mappings(file_cols, [e['field'] for e in missing_mandatory])
-                
-                if suggestions:
-                    for file_col, spec_col in suggestions.items():
-                        st.markdown(f"- `{file_col}` → **{spec_col}**")
-                    st.info("💡 Go back to Header Mapping to fix these column names.")
-                else:
-                    st.warning("Some required columns may need to be added to your data file.")
-            
-            # Display other errors
-            other_errors = [e for e in errors if e.get("type") != "missing_mandatory_field"]
-            if other_errors:
-                with st.expander(f"View Other Issues ({len(other_errors)})"):
-                    for error in other_errors[:20]:
-                        st.markdown(f"- **{error.get('field', 'Unknown')}**: {error.get('message', str(error))}")
-            
-            # Display warnings
-            warnings = validation_results.get("warnings", [])
-            if warnings:
-                with st.expander(f"View Warnings ({len(warnings)})"):
-                    for warning in warnings[:20]:
-                        if isinstance(warning, dict):
-                            st.markdown(f"- **{warning.get('field', 'Unknown')}**: {warning.get('message', str(warning))}")
-                        else:
-                            st.markdown(f"- {warning}")
-                                
         except Exception as e:
             log_exception(e, logger, {"action": "validation"})
             st.error(f"Validation error: {str(e)}")
@@ -416,6 +374,70 @@ def render_step_validation(wizard_state: WizardState) -> None:
         if st.button("Continue to Auto-Fix", type="primary"):
             wizard_state.next_step()
             st.rerun()
+
+
+def _render_legacy_validation(wizard_state: WizardState, df_mapped: pd.DataFrame, dataset_type: str) -> None:
+    """Fallback validation using existing seats_data_handler."""
+    try:
+        from utils.seats_data_handler import get_seats_handler, load_spec_by_type
+        
+        handler = get_seats_handler()
+        
+        try:
+            spec = load_spec_by_type(dataset_type)
+            results = handler.validate_against_spec(df_mapped, spec)
+            
+            validation_results = {
+                "is_valid": results.get("is_valid", False),
+                "errors": results.get("errors", []),
+                "warnings": results.get("warnings", []),
+                "total_errors": len(results.get("errors", [])),
+                "total_warnings": len(results.get("warnings", [])),
+            }
+            
+        except ValueError:
+            from utils.validator import validate_dataframe
+            results = validate_dataframe(df_mapped, dataset_type)
+            validation_results = results
+        
+        wizard_state.set_data("validation_results", validation_results)
+        wizard_state.set_data("dataframe_mapped", df_mapped)
+        
+        # Display results
+        total_errors = validation_results.get("total_errors", 0)
+        total_warnings = validation_results.get("total_warnings", 0)
+        
+        if total_errors == 0:
+            st.success("Validation passed! No critical issues found.")
+        else:
+            st.error(f"Found {total_errors} validation errors.")
+        
+        if total_warnings > 0:
+            st.warning(f"Found {total_warnings} warnings.")
+        
+        # Display errors
+        errors = validation_results.get("errors", [])
+        if errors:
+            with st.expander(f"View Issues ({len(errors)})"):
+                for error in errors[:20]:
+                    if isinstance(error, dict):
+                        st.markdown(f"- **{error.get('field', 'Unknown')}**: {error.get('message', str(error))}")
+                    else:
+                        st.markdown(f"- {error}")
+        
+        # Display warnings
+        warnings = validation_results.get("warnings", [])
+        if warnings:
+            with st.expander(f"View Warnings ({len(warnings)})"):
+                for warning in warnings[:20]:
+                    if isinstance(warning, dict):
+                        st.markdown(f"- **{warning.get('field', 'Unknown')}**: {warning.get('message', str(warning))}")
+                    else:
+                        st.markdown(f"- {warning}")
+                        
+    except Exception as e:
+        log_exception(e, logger, {"action": "legacy_validation"})
+        st.error(f"Validation error: {str(e)}")
 
 
 def _suggest_column_mappings(file_cols: set, missing_cols: list) -> dict:
