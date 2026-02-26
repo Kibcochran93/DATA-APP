@@ -1,0 +1,8 @@
+STAFF_NUMBER,STAFF_TYPE,FORENAME,LAST_NAME,TITLE,GENDER,BADGE_NUMBER,EMAIL,TELEPHONE,UNIVERSITY_EMAIL,LOGIN_ID,ADDRESS_1,PREFERRED_NAME,EXTERNAL_KEY,DESCRIPTION
+TUT001,LECTRR,John,Smith,dr,m,00998877,john.smith@personal.com,+447111222333,j.smith@university.edu,jsmith@university.edu,15 Faculty Lane,John,EXT001,Senior Lecturer in Computer Science
+TUT002,INVALID_TYPE,Mary,Jones,PROF,F,00998878,mary.jones@personal.com,+447222333444,m.jones@university.edu,mjones@university.edu,22 Academic Road,Mary,EXT002,Professor of Computer Science
+,MDLLDR,Kate,Wilson,DR,F,00998879,kate.wilson@personal.com,+447333444555,k.wilson@university.edu,kwilson@university.edu,8 College Street,Kate,EXT003,Module Leader for Business Studies
+TUT004,CRSLDR,Peter,,PROF,X,00998880,peter.anderson@personal.com,+447444555666,p.anderson@university.edu,panderson@university.edu,45 University Drive,Pete,EXT004,Course Leader for Engineering
+TUT005,ASSLEC,Rachel,Thompson,MS,F,00998881,invalid-email,+447555666777,r.thompson@university.edu,rthompson@university.edu,30 Arts Quarter,,EXT005,Associate Lecturer in Fine Arts
+TUT006,VSTLEC,Michael,Brown,MR,M,00998882,michael.brown@personal.com,123,also-invalid-email,,,,EXT006,Visiting Lecturer
+TUT007,PRGMAN,,Davis,MS,F,00998883,sarah.davis@personal.com,+447777888999,s.davis@university.edu,sdavis@university.edu,12 Admin Building,Sarah,EXT007,Programme Manager for Computing
