@@ -260,7 +260,7 @@ def render_data_editor(
         df,
         key=key,
         column_config=column_config,
-        use_container_width=True,
+        width="stretch",
         num_rows="dynamic"
     )
     
@@ -551,7 +551,7 @@ def render_user_management() -> None:
             "Created": info.get("created_at", "Unknown")
         })
     
-    st.dataframe(pd.DataFrame(user_data), use_container_width=True)
+    st.dataframe(pd.DataFrame(user_data), width="stretch")
 
 
 # =============================================================================

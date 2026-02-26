@@ -27,9 +27,19 @@ def setup_logger(name: str = 'seats_debug', log_file: str = 'debug.log') -> logg
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
-    # Create logs directory if it doesn't exist
-    log_dir = Path('/app/logs')  # Use absolute path in container
-    log_dir.mkdir(exist_ok=True)
+    # Create logs directory - try /app/logs first (container), fallback to local
+    log_dir = Path('/app/logs')
+    if not log_dir.parent.exists():
+        # Not in container, use local logs directory
+        log_dir = Path.cwd() / 'logs'
+    
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        # Fallback to temp directory if we can't create logs
+        import tempfile
+        log_dir = Path(tempfile.gettempdir()) / 'seats_logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
     
     # File handler for debug logs
     debug_handler = logging.FileHandler(
