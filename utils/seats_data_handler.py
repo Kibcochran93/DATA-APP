@@ -1099,6 +1099,102 @@ def load_spec_by_type(dataset_type: str) -> Dict[str, Any]:
     return get_seats_handler().load_spec(spec_path)
 
 
+def get_ordered_fields(spec: Dict[str, Any]) -> List[str]:
+    """
+    Get all fields from spec in correct position order.
+    
+    Args:
+        spec: Master spec dictionary
+        
+    Returns:
+        List of field names sorted by position
+    """
+    fields = spec.get('fields', {})
+    
+    # Sort fields by position
+    sorted_fields = sorted(
+        fields.items(),
+        key=lambda x: x[1].get('position', 999)
+    )
+    
+    return [field_name for field_name, _ in sorted_fields]
+
+
+def get_missing_columns(df: pd.DataFrame, spec: Dict[str, Any]) -> List[str]:
+    """
+    Get list of columns missing from dataframe that are in the spec.
+    
+    Args:
+        df: DataFrame to check
+        spec: Master spec dictionary
+        
+    Returns:
+        List of missing column names in spec order
+    """
+    ordered_fields = get_ordered_fields(spec)
+    df_columns_upper = {col.upper() for col in df.columns}
+    
+    missing = []
+    for field in ordered_fields:
+        if field.upper() not in df_columns_upper:
+            missing.append(field)
+    
+    return missing
+
+
+def insert_missing_columns(
+    df: pd.DataFrame,
+    spec: Dict[str, Any],
+    columns_to_insert: Optional[List[str]] = None
+) -> pd.DataFrame:
+    """
+    Insert missing columns into dataframe in correct spec order.
+    
+    Args:
+        df: DataFrame to modify
+        spec: Master spec dictionary
+        columns_to_insert: Optional list of specific columns to insert.
+                          If None, inserts all missing columns.
+        
+    Returns:
+        DataFrame with missing columns inserted in correct positions
+    """
+    ordered_fields = get_ordered_fields(spec)
+    
+    if columns_to_insert is None:
+        columns_to_insert = get_missing_columns(df, spec)
+    
+    if not columns_to_insert:
+        return df
+    
+    # Create a mapping of current columns (case-insensitive)
+    current_cols = {col.upper(): col for col in df.columns}
+    
+    # Build the new column order
+    new_columns = []
+    df_copy = df.copy()
+    
+    for field in ordered_fields:
+        field_upper = field.upper()
+        
+        if field_upper in current_cols:
+            # Column exists, use original case
+            new_columns.append(current_cols[field_upper])
+        elif field in columns_to_insert:
+            # Add missing column with empty string values
+            df_copy[field] = ''
+            new_columns.append(field)
+    
+    # Add any columns from df that aren't in the spec (at the end)
+    for col in df.columns:
+        if col.upper() not in {f.upper() for f in ordered_fields}:
+            if col not in new_columns:
+                new_columns.append(col)
+    
+    # Reorder dataframe
+    return df_copy[new_columns]
+
+
 __all__ = [
     'SEATSDataHandler',
     'get_seats_handler',
@@ -1106,6 +1202,9 @@ __all__ = [
     'load_timetable_spec',
     'load_staff_spec',
     'load_spec_by_type',
+    'get_ordered_fields',
+    'get_missing_columns',
+    'insert_missing_columns',
     'MultiValueField',
     'CrossFileValidationResult',
     'LEADING_ZERO_FIELDS',
