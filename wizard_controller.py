@@ -197,7 +197,7 @@ def render_step_dataset_select(wizard_state: WizardState) -> None:
 
 
 def render_step_header_mapping(wizard_state: WizardState) -> None:
-    """Render header mapping step."""
+    """Render header mapping step with SIS auto-detection."""
     st.subheader("Step 3: Map Headers")
     
     df = wizard_state.get_data("dataframe")
@@ -206,8 +206,6 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
     if df is None:
         st.error("No data loaded. Please go back to upload.")
         return
-    
-    st.info("Map your column headers to the expected SEATS fields.")
     
     # Get expected headers from SEATS spec
     try:
@@ -235,48 +233,178 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
             expected = loader.get_expected_headers(dataset_type)
         except Exception:
             expected = {"mandatory": [], "optional": []}
+        spec = None
     
     current_headers = df.columns.tolist()
     all_expected = expected.get("mandatory", []) + expected.get("optional", [])
     
-    # Show current columns vs expected
-    st.markdown("### Column Mapping")
+    # ============================================
+    # SIS Auto-Detection Section
+    # ============================================
+    st.markdown("### SIS System Detection")
     
-    # Auto-suggest mappings
+    try:
+        from utils.sis_mapper import (
+            SISMapper, SISType, detect_sis_type, 
+            suggest_mappings, transform_to_seats
+        )
+        
+        # Auto-detect SIS type
+        detection_result = detect_sis_type(df)
+        sis_mapper = SISMapper()
+        
+        # Store detection result
+        wizard_state.set_data("sis_detection", detection_result)
+        
+        # Display detection result
+        sis_icons = {
+            SISType.BANNER: "🏛️",
+            SISType.PEOPLESOFT: "☀️",
+            SISType.WORKDAY: "📊",
+            SISType.COLLEAGUE: "🎓",
+            SISType.JENZABAR: "📚",
+            SISType.GENERIC: "📋",
+            SISType.UNKNOWN: "❓"
+        }
+        
+        sis_names = {
+            SISType.BANNER: "Ellucian Banner",
+            SISType.PEOPLESOFT: "Oracle PeopleSoft",
+            SISType.WORKDAY: "Workday Student",
+            SISType.COLLEAGUE: "Ellucian Colleague",
+            SISType.JENZABAR: "Jenzabar",
+            SISType.GENERIC: "Generic/Unknown",
+            SISType.UNKNOWN: "Unknown"
+        }
+        
+        detected_type = detection_result.detected_type
+        confidence_pct = int(detection_result.confidence * 100)
+        
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            st.markdown(f"**Detected SIS:** {sis_icons.get(detected_type, '📋')} {sis_names.get(detected_type, 'Unknown')}")
+        with col2:
+            st.markdown(f"**Confidence:** {confidence_pct}%")
+        with col3:
+            if detection_result.matched_indicators:
+                st.markdown(f"**Matched:** {len(detection_result.matched_indicators)} patterns")
+        
+        if detection_result.matched_indicators:
+            with st.expander("Detected patterns", expanded=False):
+                st.write(", ".join(detection_result.matched_indicators))
+        
+        # SIS Mapping Options
+        st.markdown("---")
+        
+        # Get SIS-based mapping suggestions
+        sis_suggestions = suggest_mappings(df, detected_type)
+        high_confidence_mappings = [m for m in sis_suggestions if m.confidence >= 0.6]
+        
+        if high_confidence_mappings:
+            st.success(f"✓ Found {len(high_confidence_mappings)} column mappings from {sis_names.get(detected_type, 'SIS')}")
+            
+            # Show mapping preview
+            with st.expander(f"Preview SIS mappings ({len(high_confidence_mappings)} columns)", expanded=True):
+                for mapping in high_confidence_mappings[:15]:
+                    conf_icon = "🟢" if mapping.confidence >= 0.8 else "🟡"
+                    st.markdown(f"{conf_icon} `{mapping.source_column}` → **{mapping.target_column}** ({int(mapping.confidence*100)}%)")
+                if len(high_confidence_mappings) > 15:
+                    st.caption(f"... and {len(high_confidence_mappings) - 15} more")
+            
+            # Apply SIS mappings button
+            if st.button("🔄 Apply SIS Mappings", type="primary", key="apply_sis"):
+                # Build mapping dict from SIS suggestions
+                sis_mapping = {}
+                for m in high_confidence_mappings:
+                    if m.source_column not in sis_mapping:
+                        sis_mapping[m.source_column] = m.target_column
+                
+                wizard_state.set_data("header_mapping", sis_mapping)
+                wizard_state.set_data("sis_mappings_applied", True)
+                st.success(f"Applied {len(sis_mapping)} SIS mappings!")
+                st.rerun()
+            
+            # Check if mappings were already applied
+            if wizard_state.get_data("sis_mappings_applied"):
+                st.info("✓ SIS mappings have been applied. Review below or continue to validation.")
+        
+        else:
+            st.info("No high-confidence SIS mappings found. Use manual mapping below.")
+        
+        sis_available = True
+        
+    except ImportError as e:
+        st.warning("SIS auto-detection not available. Using manual mapping.")
+        sis_available = False
+    except Exception as e:
+        st.warning(f"SIS detection error: {str(e)}. Using manual mapping.")
+        sis_available = False
+    
+    # ============================================
+    # Manual Column Mapping Section
+    # ============================================
+    st.markdown("---")
+    st.markdown("### Manual Column Mapping")
+    st.caption("Map your columns to SEATS fields. Columns already mapped via SIS detection are pre-selected.")
+    
+    # Get any existing mappings (from SIS or previous manual selection)
+    existing_mapping = wizard_state.get_data("header_mapping", {})
+    
+    # Auto-suggest additional mappings using legacy method
     file_cols_set = set(current_headers)
     auto_suggestions = _suggest_column_mappings(file_cols_set, expected.get("mandatory", []))
     
-    if auto_suggestions:
+    # Merge with existing mappings (existing takes priority)
+    combined_suggestions = {**auto_suggestions, **existing_mapping}
+    
+    if auto_suggestions and not existing_mapping:
         st.warning("⚠️ Some columns may need renaming. Suggested mappings:")
-        for file_col, spec_col in auto_suggestions.items():
+        for file_col, spec_col in list(auto_suggestions.items())[:5]:
             st.markdown(f"- `{file_col}` → **{spec_col}**")
     
     # Check for already matching columns
     matching = [col for col in current_headers if col in all_expected]
-    missing_mandatory = [f for f in expected.get("mandatory", []) if f not in current_headers]
+    missing_mandatory = [f for f in expected.get("mandatory", []) if f not in current_headers and f not in existing_mapping.values()]
     
-    if matching:
-        st.success(f"✓ {len(matching)} columns already match spec names")
-    
-    if missing_mandatory:
-        st.error(f"✗ {len(missing_mandatory)} mandatory columns missing: {', '.join(missing_mandatory[:5])}{'...' if len(missing_mandatory) > 5 else ''}")
+    col1, col2 = st.columns(2)
+    with col1:
+        if matching:
+            st.success(f"✓ {len(matching)} columns match spec")
+    with col2:
+        if missing_mandatory:
+            st.error(f"✗ {len(missing_mandatory)} mandatory missing")
     
     # Column mapping interface
-    st.markdown("---")
-    st.markdown("**Map each column to a SEATS field (or ignore):**")
+    st.markdown("**Map each column:**")
     
     mapping = {}
     
-    # Group columns: exact matches, suggested mappings, others
-    cols_with_suggestions = list(auto_suggestions.keys())
-    cols_exact_match = [c for c in current_headers if c in all_expected]
-    cols_other = [c for c in current_headers if c not in cols_exact_match and c not in cols_with_suggestions]
+    # Group columns by status
+    cols_mapped_by_sis = [c for c in current_headers if c in existing_mapping]
+    cols_exact_match = [c for c in current_headers if c in all_expected and c not in cols_mapped_by_sis]
+    cols_with_suggestions = [c for c in auto_suggestions.keys() if c not in cols_mapped_by_sis and c not in cols_exact_match]
+    cols_other = [c for c in current_headers if c not in cols_mapped_by_sis and c not in cols_exact_match and c not in cols_with_suggestions]
     
-    # Show suggested mappings first
+    # Show SIS-mapped columns first (if any)
+    if cols_mapped_by_sis:
+        with st.expander(f"SIS-mapped columns ({len(cols_mapped_by_sis)})", expanded=False):
+            for col in cols_mapped_by_sis:
+                mapped_to = existing_mapping.get(col, col)
+                default_idx = all_expected.index(mapped_to) + 1 if mapped_to in all_expected else 0
+                selected = st.selectbox(
+                    f"'{col}' →",
+                    options=["(ignore)"] + all_expected,
+                    index=default_idx,
+                    key=f"map_{col}"
+                )
+                if selected != "(ignore)":
+                    mapping[col] = selected
+    
+    # Show columns needing attention
     if cols_with_suggestions:
         st.markdown("**Columns needing attention:**")
         for col in cols_with_suggestions:
-            suggested = auto_suggestions.get(col, "(ignore)")
+            suggested = combined_suggestions.get(col, "(ignore)")
             default_idx = all_expected.index(suggested) + 1 if suggested in all_expected else 0
             selected = st.selectbox(
                 f"'{col}' →",
@@ -288,20 +416,26 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
                 mapping[col] = selected
     
     # Show other columns in expander
-    with st.expander(f"Other columns ({len(cols_exact_match) + len(cols_other)})"):
-        for col in cols_exact_match + cols_other:
-            default_idx = all_expected.index(col) + 1 if col in all_expected else 0
-            selected = st.selectbox(
-                f"'{col}' →",
-                options=["(ignore)"] + all_expected,
-                index=default_idx,
-                key=f"map_{col}"
-            )
-            if selected != "(ignore)":
-                mapping[col] = selected
+    other_cols = cols_exact_match + cols_other
+    if other_cols:
+        with st.expander(f"Other columns ({len(other_cols)})"):
+            for col in other_cols:
+                default_idx = all_expected.index(col) + 1 if col in all_expected else 0
+                selected = st.selectbox(
+                    f"'{col}' →",
+                    options=["(ignore)"] + all_expected,
+                    index=default_idx,
+                    key=f"map_{col}"
+                )
+                if selected != "(ignore)":
+                    mapping[col] = selected
     
-    wizard_state.set_data("header_mapping", mapping)
+    # Merge manual selections with SIS mappings
+    final_mapping = {**existing_mapping, **mapping}
+    wizard_state.set_data("header_mapping", final_mapping)
     
+    # Navigation
+    st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Back"):
@@ -819,7 +953,51 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         st.markdown("---")
         
         # ============================================
-        # Section 3: Basic Data Fixes (fallback)
+        # Section 3: SIS Value Transformations
+        # ============================================
+        fix_sis_values = False
+        sis_detection = wizard_state.get_data("sis_detection")
+        
+        if sis_detection and sis_detection.detected_type.value != "generic":
+            try:
+                from utils.sis_mapper import SISMapper, SISType
+                
+                sis_names = {
+                    SISType.BANNER: "Banner",
+                    SISType.PEOPLESOFT: "PeopleSoft",
+                    SISType.WORKDAY: "Workday",
+                    SISType.COLLEAGUE: "Colleague",
+                    SISType.JENZABAR: "Jenzabar",
+                }
+                
+                sis_name = sis_names.get(sis_detection.detected_type, "SIS")
+                
+                st.markdown("#### SIS Value Transformations")
+                st.info(f"Detected {sis_name} format. Apply standard value transformations?")
+                
+                fix_sis_values = st.checkbox(
+                    f"🔄 Apply {sis_name} value transformations",
+                    value=True,
+                    help="Converts SIS-specific codes to SEATS format (e.g., 'Male' to 'M', 'Active' to 'A', date formats)"
+                )
+                
+                if fix_sis_values:
+                    with st.expander("Value transformations to apply", expanded=False):
+                        st.markdown("**Fields that will be transformed:**")
+                        st.write("- GENDER: Male/Female/M/F → M/F/O")
+                        st.write("- VISAREQUIRED: Yes/No/True/False → Y/N")
+                        st.write("- STUDENT_STATUS: Active/Enrolled/Withdrawn → A/W/C")
+                        st.write("- STUDENT_MOA: Full-Time/Part-Time → FT/PT")
+                        st.write("- ADMIN_AREA: Undergraduate/Graduate → UG/PG")
+                        st.write("- Dates: Various formats → YYYY-MM-DD")
+                
+            except ImportError:
+                pass
+        
+        st.markdown("---")
+        
+        # ============================================
+        # Section 4: Basic Data Fixes (fallback)
         # ============================================
         st.markdown("#### Additional Data Fixes")
         fix_whitespace = st.checkbox("Trim whitespace from all text fields", value=True)
@@ -874,14 +1052,42 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                                 type_label = fix_type.replace('_', ' ').title()
                                 fixes_applied.append(f"Fixed {count} {type_label} issue(s)")
                     
-                    # Fix 3: Basic whitespace trimming
+                    # Fix 3: SIS value transformations
+                    if fix_sis_values and sis_detection:
+                        try:
+                            from utils.sis_mapper import SISMapper
+                            sis_mapper = SISMapper()
+                            
+                            # Apply value transformations
+                            sis_transform_count = 0
+                            for seats_col, value_config in sis_mapper.value_mappings.items():
+                                if seats_col in df_fixed.columns:
+                                    count = sis_mapper._transform_values(df_fixed, seats_col, value_config)
+                                    sis_transform_count += count
+                            
+                            # Apply date conversions
+                            date_cols = sis_mapper._identify_date_columns(df_fixed)
+                            sis_date_count = 0
+                            for col in date_cols:
+                                converted = sis_mapper._convert_dates(df_fixed, col)
+                                sis_date_count += converted
+                            
+                            if sis_transform_count > 0:
+                                fixes_applied.append(f"Transformed {sis_transform_count} SIS value(s)")
+                            if sis_date_count > 0:
+                                fixes_applied.append(f"Converted {sis_date_count} SIS date(s)")
+                                
+                        except Exception as e:
+                            log_exception(e, logger, {"action": "sis_transform"})
+                    
+                    # Fix 4: Basic whitespace trimming
                     if fix_whitespace:
                         for col in df_fixed.select_dtypes(include=["object"]).columns:
                             df_fixed[col] = df_fixed[col].astype(str).str.strip()
                             df_fixed[col] = df_fixed[col].replace('nan', '')
                         fixes_applied.append("Trimmed whitespace")
                     
-                    # Fix 4: Standardize case for enum fields (basic)
+                    # Fix 5: Standardize case for enum fields (basic)
                     if fix_case and spec and not fix_enums:
                         fields_spec = spec.get('fields', {})
                         enum_fixed = 0
@@ -900,7 +1106,7 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                         if enum_fixed > 0:
                             fixes_applied.append(f"Standardized case for {enum_fixed} enum field(s)")
                     
-                    # Fix 5: Date formats (basic)
+                    # Fix 6: Date formats (basic)
                     if fix_dates_basic and spec and not fix_date_time:
                         fields_spec = spec.get('fields', {})
                         dates_fixed = 0
