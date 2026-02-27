@@ -1,0 +1,405 @@
+{
+  "version": "1.0",
+  "description": "SIS to SEATS Column Mapping Configuration - Maps common Student Information System exports to SEATS format",
+  "supported_systems": ["Banner", "PeopleSoft", "Workday", "Colleague", "Jenzabar", "PowerCampus", "Generic"],
+  
+  "column_mappings": {
+    "STUDENT_ID": {
+      "description": "Student unique identifier",
+      "banner": ["SPRIDEN_ID", "STUDENT_ID", "SGBSTDN_PIDM", "PIDM", "BANNER_ID", "STU_ID"],
+      "peoplesoft": ["EMPLID", "STUDENT_ID", "ID", "CAMPUS_ID", "PS_ID"],
+      "workday": ["STUDENT_ID", "WORKER_ID", "ACADEMIC_PERSON_ID", "WD_ID"],
+      "colleague": ["PERSON_ID", "STUDENT_ID", "ID"],
+      "jenzabar": ["ID_NUM", "STUDENT_ID", "STU_ID"],
+      "generic": ["STUDENT_NUMBER", "STUDENT_NO", "STU_NUM", "STUDENTID", "SID", "ID_NUMBER"]
+    },
+    "STUDENT_FORENAME": {
+      "description": "Student first name",
+      "banner": ["SPRIDEN_FIRST_NAME", "FIRST_NAME", "FNAME", "SPRIDEN_FNAME"],
+      "peoplesoft": ["FIRST_NAME", "NAME_FIRST", "FIRST_NM"],
+      "workday": ["LEGAL_FIRST_NAME", "FIRST_NAME", "PREFERRED_FIRST_NAME"],
+      "colleague": ["FIRST_NAME", "FNAME"],
+      "jenzabar": ["FIRST_NAME", "FNAME"],
+      "generic": ["FIRSTNAME", "FIRST_NAME", "GIVEN_NAME", "FORENAME", "FNAME", "GIVENNAME"]
+    },
+    "STUDENT_LAST_NAME": {
+      "description": "Student last name/surname",
+      "banner": ["SPRIDEN_LAST_NAME", "LAST_NAME", "LNAME", "SURNAME", "SPRIDEN_LNAME"],
+      "peoplesoft": ["LAST_NAME", "NAME_LAST", "LAST_NM"],
+      "workday": ["LEGAL_LAST_NAME", "LAST_NAME", "PREFERRED_LAST_NAME"],
+      "colleague": ["LAST_NAME", "LNAME", "SURNAME"],
+      "jenzabar": ["LAST_NAME", "LNAME", "SURNAME"],
+      "generic": ["LASTNAME", "LAST_NAME", "FAMILY_NAME", "SURNAME", "LNAME", "FAMILYNAME"]
+    },
+    "DATE_OF_BIRTH": {
+      "description": "Student date of birth",
+      "banner": ["SPBPERS_BIRTH_DATE", "BIRTH_DATE", "DOB", "BIRTHDATE"],
+      "peoplesoft": ["BIRTHDATE", "BIRTH_DATE", "DATE_OF_BIRTH", "DOB"],
+      "workday": ["DATE_OF_BIRTH", "BIRTH_DATE", "DOB"],
+      "colleague": ["BIRTH_DATE", "DOB"],
+      "jenzabar": ["BIRTH_DATE", "DOB", "BIRTHDATE"],
+      "generic": ["BIRTHDATE", "BIRTH_DATE", "DOB", "DATE_OF_BIRTH", "BDATE"]
+    },
+    "GENDER": {
+      "description": "Student gender",
+      "banner": ["SPBPERS_SEX", "SEX", "GENDER", "SPBPERS_GNDR_CODE"],
+      "peoplesoft": ["SEX", "GENDER", "SEX_CODE"],
+      "workday": ["GENDER", "LEGAL_GENDER"],
+      "colleague": ["GENDER", "SEX"],
+      "jenzabar": ["GENDER", "SEX", "GENDER_CODE"],
+      "generic": ["SEX", "GENDER", "GENDER_CODE", "SEX_CODE"]
+    },
+    "STUDENT_EMAIL": {
+      "description": "Student personal email",
+      "banner": ["GOREMAL_EMAIL_ADDRESS", "EMAIL", "EMAIL_ADDRESS", "PERSONAL_EMAIL"],
+      "peoplesoft": ["EMAIL_ADDR", "EMAIL", "PERSONAL_EMAIL", "EMAIL_ADDRESS"],
+      "workday": ["EMAIL_ADDRESS", "PRIMARY_EMAIL", "PERSONAL_EMAIL"],
+      "colleague": ["PREFERRED_EMAIL", "EMAIL", "PERSONAL_EMAIL"],
+      "jenzabar": ["EMAIL", "EMAIL_ADDRESS", "PERSONAL_EMAIL"],
+      "generic": ["EMAIL", "EMAIL_ADDRESS", "EMAILADDRESS", "PERSONAL_EMAIL", "STU_EMAIL"]
+    },
+    "UNIVERSITY_EMAIL": {
+      "description": "Student institutional email",
+      "banner": ["GOREMAL_EMAIL_ADDRESS", "UNIVERSITY_EMAIL", "UNI_EMAIL", "INSTITUTIONAL_EMAIL", "CAMPUS_EMAIL"],
+      "peoplesoft": ["CAMPUS_EMAIL", "INSTITUTIONAL_EMAIL", "UNIVERSITY_EMAIL"],
+      "workday": ["WORK_EMAIL", "INSTITUTIONAL_EMAIL", "UNIVERSITY_EMAIL"],
+      "colleague": ["COLLEGE_EMAIL", "INSTITUTIONAL_EMAIL"],
+      "jenzabar": ["COLLEGE_EMAIL", "UNIVERSITY_EMAIL"],
+      "generic": ["UNIVERSITY_EMAIL", "UNI_EMAIL", "INSTITUTIONAL_EMAIL", "CAMPUS_EMAIL", "COLLEGE_EMAIL", "EDU_EMAIL"]
+    },
+    "STUDENT_TELEPHONE": {
+      "description": "Student phone number",
+      "banner": ["SPRTELE_PHONE_NUMBER", "PHONE", "TELEPHONE", "PHONE_NUMBER", "MOBILE"],
+      "peoplesoft": ["PHONE", "PHONE_NUMBER", "MOBILE_PHONE", "CELL_PHONE"],
+      "workday": ["PHONE_NUMBER", "PRIMARY_PHONE", "MOBILE_PHONE"],
+      "colleague": ["PHONE", "MOBILE", "CELL_PHONE"],
+      "jenzabar": ["PHONE", "MOBILE", "TELEPHONE"],
+      "generic": ["PHONE", "TELEPHONE", "PHONE_NUMBER", "MOBILE", "CELL", "TEL", "CONTACT_NUMBER"]
+    },
+    "STUDENT_LOGIN_ID": {
+      "description": "Student SSO/login ID",
+      "banner": ["GOBUMAP_UDC_ID", "LOGIN_ID", "NETWORK_ID", "USER_ID", "SSO_ID", "USERNAME"],
+      "peoplesoft": ["OPRID", "USER_ID", "LOGIN_ID", "NETWORK_ID"],
+      "workday": ["USER_NAME", "LOGIN_ID", "NETWORK_ID"],
+      "colleague": ["NETWORK_ID", "LOGIN_ID", "USER_ID"],
+      "jenzabar": ["LOGIN_NAME", "USER_ID", "NETWORK_ID"],
+      "generic": ["LOGIN_ID", "USERNAME", "USER_ID", "NETWORK_ID", "SSO_ID", "LOGON_ID", "USER_NAME"]
+    },
+    "COURSE_ID": {
+      "description": "Program/Course identifier",
+      "banner": ["SMRPRLE_PROGRAM", "PROGRAM_CODE", "PROGRAM", "SORLCUR_PROGRAM", "PROG_CODE", "CURRICULUM_ID"],
+      "peoplesoft": ["ACAD_PROG", "ACADEMIC_PROGRAM", "PROGRAM_CODE", "PROGRAM"],
+      "workday": ["ACADEMIC_PROGRAM", "PROGRAM_OF_STUDY", "PROGRAM_CODE"],
+      "colleague": ["ACAD_PROGRAM", "PROGRAM_CODE", "PROGRAM"],
+      "jenzabar": ["PROGRAM_ID", "PROGRAM_CODE", "MAJOR_CODE"],
+      "generic": ["PROGRAM_CODE", "PROGRAMME_CODE", "PROGRAM_ID", "PROG_ID", "COURSE_CODE", "MAJOR_CODE", "CURRICULUM_CODE"]
+    },
+    "COURSE_NAME": {
+      "description": "Program/Course name",
+      "banner": ["SMRPRLE_PROGRAM_DESC", "PROGRAM_DESC", "PROGRAM_NAME", "PROGRAM_DESCRIPTION"],
+      "peoplesoft": ["ACAD_PROG_DESCR", "PROGRAM_DESCR", "PROGRAM_NAME"],
+      "workday": ["PROGRAM_NAME", "ACADEMIC_PROGRAM_NAME"],
+      "colleague": ["PROGRAM_TITLE", "PROGRAM_NAME"],
+      "jenzabar": ["PROGRAM_NAME", "PROGRAM_TITLE", "MAJOR_NAME"],
+      "generic": ["PROGRAM_NAME", "PROGRAMME_NAME", "PROGRAM_DESC", "PROG_NAME", "COURSE_NAME", "MAJOR_NAME"]
+    },
+    "MODULE_ID": {
+      "description": "Module/Course section identifier",
+      "banner": ["SSBSECT_CRN", "CRN", "COURSE_ID", "SECTION_ID", "SIRASGN_CRN"],
+      "peoplesoft": ["CLASS_NBR", "CRSE_ID", "COURSE_ID", "SECTION_ID", "CATALOG_NBR"],
+      "workday": ["COURSE_SECTION_ID", "CLASS_ID", "COURSE_ID"],
+      "colleague": ["COURSE_SEC_ID", "SECTION_ID", "CRS_SEC_ID"],
+      "jenzabar": ["COURSE_ID", "CRS_CDE", "SECTION_ID"],
+      "generic": ["MODULE_CODE", "COURSE_CODE", "CRN", "SECTION_ID", "CLASS_ID", "SUBJECT_CODE", "UNIT_CODE"]
+    },
+    "MODULE_NAME": {
+      "description": "Module/Course name",
+      "banner": ["SCBCRSE_TITLE", "COURSE_TITLE", "TITLE", "SSBSECT_CRSE_TITLE"],
+      "peoplesoft": ["COURSE_TITLE", "CRSE_TITLE", "DESCR"],
+      "workday": ["COURSE_TITLE", "COURSE_NAME", "CLASS_TITLE"],
+      "colleague": ["COURSE_TITLE", "SEC_NAME"],
+      "jenzabar": ["COURSE_NAME", "CRS_TITLE"],
+      "generic": ["MODULE_NAME", "COURSE_TITLE", "COURSE_NAME", "CLASS_NAME", "SUBJECT_NAME", "UNIT_NAME"]
+    },
+    "SCHOOL_ID": {
+      "description": "Department/School identifier",
+      "banner": ["STVDEPT_CODE", "DEPT_CODE", "DEPARTMENT_CODE", "SCBCRSE_DEPT_CODE", "COLLEGE_CODE"],
+      "peoplesoft": ["ACAD_ORG", "DEPT_ID", "DEPARTMENT", "ACAD_GROUP"],
+      "workday": ["ACADEMIC_UNIT", "DEPARTMENT_ID", "ORG_ID"],
+      "colleague": ["DIVISION", "DEPT_CODE", "DEPARTMENT"],
+      "jenzabar": ["DEPT_CDE", "DEPARTMENT_CODE", "DIV_CDE"],
+      "generic": ["DEPARTMENT_CODE", "DEPT_CODE", "DEPT_ID", "SCHOOL_CODE", "DIVISION_CODE", "FACULTY_CODE", "COLLEGE_CODE"]
+    },
+    "SCHOOL_NAME": {
+      "description": "Department/School name",
+      "banner": ["STVDEPT_DESC", "DEPT_DESC", "DEPARTMENT_NAME", "COLLEGE_NAME"],
+      "peoplesoft": ["ACAD_ORG_DESCR", "DEPT_DESCR", "DEPARTMENT_NAME"],
+      "workday": ["ACADEMIC_UNIT_NAME", "DEPARTMENT_NAME"],
+      "colleague": ["DIVISION_NAME", "DEPT_NAME"],
+      "jenzabar": ["DEPT_DESC", "DEPARTMENT_NAME"],
+      "generic": ["DEPARTMENT_NAME", "DEPT_NAME", "SCHOOL_NAME", "DIVISION_NAME", "FACULTY_NAME", "COLLEGE_NAME"]
+    },
+    "VISAREQUIRED": {
+      "description": "International/Tier4 student indicator",
+      "banner": ["SPBPERS_CITZ_IND", "CITIZEN_IND", "INTERNATIONAL_IND", "VISA_IND", "GOBINTL_VISA_IND"],
+      "peoplesoft": ["VISA_PERMIT_TYPE", "CITIZEN_STATUS", "INTERNATIONAL_IND"],
+      "workday": ["CITIZENSHIP_STATUS", "VISA_REQUIRED", "INTERNATIONAL_STUDENT"],
+      "colleague": ["INTL_STUDENT", "VISA_TYPE"],
+      "jenzabar": ["CITIZEN_OF", "VISA_TYPE", "INTERNATIONAL"],
+      "generic": ["INTERNATIONAL", "VISA_REQUIRED", "TIER4", "IS_INTERNATIONAL", "INTL_STUDENT", "FOREIGN_STUDENT"]
+    },
+    "CTY_NATIONALITY": {
+      "description": "Student nationality/citizenship",
+      "banner": ["SPBPERS_CITZ_CODE", "GOBINTL_NATN_CODE_LEGAL", "CITIZENSHIP", "NATIONALITY"],
+      "peoplesoft": ["CITIZENSHIP_COUNTRY", "COUNTRY_CITIZEN", "NATIONALITY"],
+      "workday": ["CITIZENSHIP_COUNTRY", "NATIONALITY", "COUNTRY_OF_CITIZENSHIP"],
+      "colleague": ["CITIZENSHIP", "CITIZEN_COUNTRY"],
+      "jenzabar": ["CITIZEN_OF", "CITIZENSHIP"],
+      "generic": ["NATIONALITY", "CITIZENSHIP", "CITIZEN_COUNTRY", "COUNTRY_CITIZENSHIP", "NATN_CODE"]
+    },
+    "CTY_DOMICILE": {
+      "description": "Student home/domicile country",
+      "banner": ["SABSUPL_NATN_CODE_LEGAL", "HOME_COUNTRY", "DOMICILE", "COUNTRY_OF_RESIDENCE"],
+      "peoplesoft": ["HOME_COUNTRY", "DOMICILE", "COUNTRY_OF_RESIDENCE"],
+      "workday": ["COUNTRY_OF_RESIDENCE", "HOME_COUNTRY", "DOMICILE"],
+      "colleague": ["HOME_COUNTRY", "COUNTRY_RES"],
+      "jenzabar": ["HOME_COUNTRY", "DOMICILE"],
+      "generic": ["DOMICILE", "HOME_COUNTRY", "COUNTRY_RESIDENCE", "RESIDENCE_COUNTRY", "COUNTRY_OF_DOMICILE"]
+    },
+    "CTY_BIRTH": {
+      "description": "Student country of birth",
+      "banner": ["SPBPERS_BIRTH_COUNTY", "GOBINTL_NATN_CODE_BIRTH", "COUNTRY_OF_BIRTH", "BIRTH_COUNTRY"],
+      "peoplesoft": ["BIRTHCOUNTRY", "COUNTRY_OF_BIRTH", "BIRTH_COUNTRY"],
+      "workday": ["COUNTRY_OF_BIRTH", "BIRTH_COUNTRY"],
+      "colleague": ["BIRTH_COUNTRY", "COUNTRY_BIRTH"],
+      "jenzabar": ["BIRTH_COUNTRY", "COUNTRY_OF_BIRTH"],
+      "generic": ["COUNTRY_OF_BIRTH", "BIRTH_COUNTRY", "BIRTHCOUNTRY", "NATN_CODE_BIRTH"]
+    },
+    "STUDENT_MOA": {
+      "description": "Mode of attendance (FT/PT)",
+      "banner": ["SGBSTDN_STST_CODE", "STVSTST_CODE", "ATTENDANCE_MODE", "FULL_PART_IND"],
+      "peoplesoft": ["FULL_PART_TIME", "ACAD_LOAD", "FT_PT_IND", "ENROLL_STATUS"],
+      "workday": ["ENROLLMENT_TYPE", "FULL_TIME_PART_TIME", "ATTENDANCE_MODE"],
+      "colleague": ["ATTEND_MODE", "FT_PT"],
+      "jenzabar": ["FT_PT_IND", "ATTENDANCE_MODE"],
+      "generic": ["ATTENDANCE_MODE", "MOA", "FT_PT", "FULL_PART_TIME", "ENROLLMENT_TYPE", "STUDY_MODE"]
+    },
+    "STUDENT_STATUS": {
+      "description": "Student enrollment status",
+      "banner": ["SGBSTDN_STST_CODE", "STUDENT_STATUS", "ENROLLMENT_STATUS", "STVSTST_CODE"],
+      "peoplesoft": ["STDNT_CAR_NBR", "ACAD_CAREER", "ENROLLMENT_STATUS", "STUDENT_STATUS"],
+      "workday": ["ACADEMIC_STATUS", "ENROLLMENT_STATUS", "STUDENT_STATUS"],
+      "colleague": ["STUDENT_STATUS", "ENROLL_STATUS"],
+      "jenzabar": ["CUR_STATUS", "STUDENT_STATUS"],
+      "generic": ["STATUS", "STUDENT_STATUS", "ENROLLMENT_STATUS", "ENROLMENT_STATUS", "STU_STATUS", "ACADEMIC_STATUS"]
+    },
+    "COHORT": {
+      "description": "Program start date/cohort",
+      "banner": ["SGBSTDN_TERM_CODE_ADMIT", "ADMIT_TERM", "START_TERM", "ENTRY_TERM"],
+      "peoplesoft": ["ADMIT_TERM", "START_TERM", "ACAD_CAREER_EFFECT_DT"],
+      "workday": ["PROGRAM_START_DATE", "ADMIT_DATE", "START_DATE"],
+      "colleague": ["START_TERM", "ADMIT_DATE"],
+      "jenzabar": ["START_DATE", "ADMIT_DATE", "ENTRY_DATE"],
+      "generic": ["COHORT", "START_DATE", "PROGRAM_START", "ENTRY_DATE", "ADMIT_DATE", "ENROLLMENT_DATE"]
+    },
+    "TITLE": {
+      "description": "Student title/prefix",
+      "banner": ["SPBPERS_NAME_PREFIX", "NAME_PREFIX", "PREFIX", "TITLE"],
+      "peoplesoft": ["NAME_PREFIX", "PREFIX", "TITLE"],
+      "workday": ["TITLE", "NAME_PREFIX", "PREFIX"],
+      "colleague": ["PREFIX", "TITLE"],
+      "jenzabar": ["PREFIX", "TITLE"],
+      "generic": ["TITLE", "PREFIX", "NAME_PREFIX", "SALUTATION", "HONORIFIC"]
+    },
+    "BADGE_NUMBER": {
+      "description": "Student ID card/badge number",
+      "banner": ["SPBPERS_PIDM", "BADGE_ID", "CARD_NUMBER", "PROX_ID"],
+      "peoplesoft": ["BADGE_NBR", "CARD_NUMBER", "ID_CARD"],
+      "workday": ["BADGE_ID", "CARD_NUMBER"],
+      "colleague": ["BADGE_NUMBER", "CARD_ID"],
+      "jenzabar": ["BADGE_NUM", "CARD_NUMBER"],
+      "generic": ["BADGE_NUMBER", "BADGE_ID", "CARD_NUMBER", "CARD_ID", "PROX_ID", "ID_CARD"]
+    },
+    "FEE_CATEGORY": {
+      "description": "Fee status/category",
+      "banner": ["SGBSTDN_RESD_CODE", "RESIDENCY", "FEE_STATUS", "STVRESD_CODE"],
+      "peoplesoft": ["TUITION_RES", "RESIDENCY_STATUS", "FEE_STATUS"],
+      "workday": ["TUITION_CATEGORY", "FEE_STATUS", "RESIDENCY"],
+      "colleague": ["RESIDENCY", "FEE_STATUS"],
+      "jenzabar": ["RESID_CODE", "FEE_STATUS"],
+      "generic": ["FEE_STATUS", "FEE_CATEGORY", "RESIDENCY", "TUITION_STATUS", "HOME_OVERSEAS"]
+    },
+    "ADMIN_AREA": {
+      "description": "Education level (UG/PG/etc)",
+      "banner": ["SGBSTDN_LEVL_CODE", "LEVEL_CODE", "STVLEVL_CODE", "ACADEMIC_LEVEL"],
+      "peoplesoft": ["ACAD_LEVEL", "CAREER", "ACADEMIC_LEVEL"],
+      "workday": ["ACADEMIC_LEVEL", "STUDENT_LEVEL", "EDUCATION_LEVEL"],
+      "colleague": ["ACAD_LEVEL", "STUDENT_LEVEL"],
+      "jenzabar": ["CLASS_LEVEL", "STUDENT_LEVEL"],
+      "generic": ["LEVEL", "EDUCATION_LEVEL", "ACADEMIC_LEVEL", "STUDY_LEVEL", "CAREER", "CLASS_LEVEL"]
+    },
+    "ADDRESS_1": {
+      "description": "Address line 1",
+      "banner": ["SPRADDR_STREET_LINE1", "ADDRESS1", "STREET1", "ADDRESS_LINE1"],
+      "peoplesoft": ["ADDRESS1", "ADDR_LINE1", "STREET_LINE1"],
+      "workday": ["ADDRESS_LINE_1", "STREET_ADDRESS_1"],
+      "colleague": ["ADDRESS_LINE1", "STREET1"],
+      "jenzabar": ["ADDR_LINE1", "ADDRESS1"],
+      "generic": ["ADDRESS1", "ADDRESS_1", "ADDRESS_LINE1", "STREET1", "STREET_LINE1"]
+    },
+    "ADDRESS_2": {
+      "description": "Address line 2",
+      "banner": ["SPRADDR_STREET_LINE2", "ADDRESS2", "STREET2", "ADDRESS_LINE2"],
+      "peoplesoft": ["ADDRESS2", "ADDR_LINE2", "STREET_LINE2"],
+      "workday": ["ADDRESS_LINE_2", "STREET_ADDRESS_2"],
+      "colleague": ["ADDRESS_LINE2", "STREET2"],
+      "jenzabar": ["ADDR_LINE2", "ADDRESS2"],
+      "generic": ["ADDRESS2", "ADDRESS_2", "ADDRESS_LINE2", "STREET2", "STREET_LINE2"]
+    },
+    "CITY": {
+      "description": "City",
+      "banner": ["SPRADDR_CITY", "CITY"],
+      "peoplesoft": ["CITY", "ADDR_CITY"],
+      "workday": ["CITY", "MUNICIPALITY"],
+      "colleague": ["CITY"],
+      "jenzabar": ["CITY"],
+      "generic": ["CITY", "TOWN", "MUNICIPALITY"]
+    },
+    "POSTCODE": {
+      "description": "Postal/ZIP code",
+      "banner": ["SPRADDR_ZIP", "ZIP", "POSTAL_CODE", "POSTCODE"],
+      "peoplesoft": ["POSTAL", "ZIP", "POSTAL_CODE"],
+      "workday": ["POSTAL_CODE", "ZIP_CODE"],
+      "colleague": ["ZIP", "POSTAL_CODE"],
+      "jenzabar": ["ZIP", "POSTAL_CODE"],
+      "generic": ["POSTCODE", "POSTAL_CODE", "ZIP", "ZIP_CODE", "ZIPCODE"]
+    }
+  },
+
+  "value_mappings": {
+    "GENDER": {
+      "description": "Gender code standardization",
+      "seats_values": ["M", "F", "O", ""],
+      "mappings": {
+        "M": ["M", "MALE", "MAN", "1", "MASCULINE"],
+        "F": ["F", "FEMALE", "WOMAN", "2", "FEMININE", "W"],
+        "O": ["O", "OTHER", "X", "NON-BINARY", "NONBINARY", "3", "U", "UNKNOWN", "N", "NEUTRAL"],
+        "": ["", "NULL", "NA", "N/A"]
+      }
+    },
+    "VISAREQUIRED": {
+      "description": "International student indicator",
+      "seats_values": ["Y", "N"],
+      "mappings": {
+        "Y": ["Y", "YES", "TRUE", "1", "T", "INTERNATIONAL", "TIER4", "VISA", "OVERSEAS", "INT"],
+        "N": ["N", "NO", "FALSE", "0", "F", "DOMESTIC", "HOME", "LOCAL", "CITIZEN", "DOM"]
+      }
+    },
+    "STUDENT_MOA": {
+      "description": "Mode of attendance standardization",
+      "seats_values": ["FT", "PT", "DL", "FL", "NA"],
+      "mappings": {
+        "FT": ["FT", "F", "FULL", "FULL-TIME", "FULL_TIME", "FULLTIME", "1"],
+        "PT": ["PT", "P", "PART", "PART-TIME", "PART_TIME", "PARTTIME", "2"],
+        "DL": ["DL", "DISTANCE", "DISTANCE_LEARNING", "ONLINE", "REMOTE"],
+        "FL": ["FL", "FLEXIBLE", "FLEX"],
+        "NA": ["NA", "N/A", "", "NULL", "UNKNOWN"]
+      }
+    },
+    "STUDENT_STATUS": {
+      "description": "Student enrollment status standardization",
+      "seats_values": ["A", "S", "W", "T", "C"],
+      "mappings": {
+        "A": ["A", "ACTIVE", "ENROLLED", "CURRENT", "AC", "ACT", "E", "ENR", "1", "REGISTERED"],
+        "S": ["S", "SUSPENDED", "SUSP"],
+        "W": ["W", "WITHDRAWN", "WITHDRAW", "WD", "WDN", "DROP", "DROPPED"],
+        "T": ["T", "TRANSFERRED", "TRANSFER", "TRANS"],
+        "C": ["C", "COMPLETED", "GRADUATED", "GRAD", "G", "COMP", "ALUMNI"]
+      }
+    },
+    "ADMIN_AREA": {
+      "description": "Education level standardization",
+      "seats_values": ["UG", "PG", "FE", "PO", "PR", "FD", "RE"],
+      "mappings": {
+        "UG": ["UG", "UNDERGRADUATE", "UNDERGRAD", "BACHELORS", "BA", "BS", "BACHELOR", "U", "1"],
+        "PG": ["PG", "POSTGRADUATE", "POSTGRAD", "GRADUATE", "GRAD", "MASTERS", "MA", "MS", "MBA", "G", "2"],
+        "FE": ["FE", "FURTHER_EDUCATION", "FURTHER", "COLLEGE", "VOCATIONAL"],
+        "PO": ["PO", "POST_DOCTORAL", "POSTDOC", "POSTDOCTORAL"],
+        "PR": ["PR", "PROFESSIONAL", "PROF"],
+        "FD": ["FD", "FOUNDATION", "FND", "FOUNDATION_DEGREE"],
+        "RE": ["RE", "RESEARCH", "PHD", "DOCTORATE", "DOCTORAL", "DR", "3"]
+      }
+    },
+    "TITLE": {
+      "description": "Title/prefix standardization",
+      "seats_values": ["MR", "MS", "MRS", "DR", "PROF", ""],
+      "mappings": {
+        "MR": ["MR", "MR.", "MISTER", "SIR"],
+        "MS": ["MS", "MS.", "MISS"],
+        "MRS": ["MRS", "MRS.", "MADAM"],
+        "DR": ["DR", "DR.", "DOCTOR"],
+        "PROF": ["PROF", "PROF.", "PROFESSOR"],
+        "": ["", "NULL", "NA", "N/A", "NONE"]
+      }
+    }
+  },
+
+  "date_formats": {
+    "description": "Common date formats from different SIS systems",
+    "banner": {
+      "formats": ["DD-MON-YYYY", "DD-MON-YY", "YYYY-MM-DD", "MM/DD/YYYY"],
+      "examples": ["15-JAN-2025", "15-JAN-25", "2025-01-15", "01/15/2025"]
+    },
+    "peoplesoft": {
+      "formats": ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY"],
+      "examples": ["2025-01-15", "01/15/2025", "15/01/2025"]
+    },
+    "workday": {
+      "formats": ["YYYY-MM-DD", "ISO8601"],
+      "examples": ["2025-01-15", "2025-01-15T00:00:00Z"]
+    },
+    "generic": {
+      "formats": ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "M/D/YYYY", "D/M/YYYY", "YYYYMMDD"],
+      "examples": ["2025-01-15", "01/15/2025", "15/01/2025", "1/15/2025", "15/1/2025", "20250115"]
+    },
+    "target_format": "YYYY-MM-DD",
+    "notes": "All dates must be converted to YYYY-MM-DD for SEATS"
+  },
+
+  "phone_formats": {
+    "description": "Phone number format requirements",
+    "target_format": "International with country code",
+    "pattern": "^(\\+|00)[0-9]{10,15}$",
+    "examples": {
+      "valid": ["+14155551234", "0014155551234", "+442071234567"],
+      "transform_rules": [
+        {"from": "(###) ###-####", "to": "+1##########", "country": "US"},
+        {"from": "###-###-####", "to": "+1##########", "country": "US"},
+        {"from": "0#### ######", "to": "+44##########", "country": "UK"}
+      ]
+    }
+  },
+
+  "term_code_patterns": {
+    "description": "Common term/semester code patterns",
+    "banner": {
+      "pattern": "YYYYTT",
+      "examples": {"202510": "Spring 2025", "202520": "Summer 2025", "202530": "Fall 2025"},
+      "term_codes": {"10": "Spring", "20": "Summer", "30": "Fall"}
+    },
+    "peoplesoft": {
+      "pattern": "####",
+      "examples": {"2251": "Spring 2025", "2253": "Fall 2025"}
+    },
+    "notes": "Term codes may need to be converted to dates for COHORT field"
+  },
+
+  "auto_detection_rules": {
+    "description": "Rules for auto-detecting SIS system type from column names",
+    "banner_indicators": ["SPRIDEN", "SPBPERS", "SGBSTDN", "PIDM", "GOREMAL", "SPRTELE", "CRN"],
+    "peoplesoft_indicators": ["EMPLID", "ACAD_PROG", "ACAD_ORG", "STDNT_CAR", "CRSE_ID", "CLASS_NBR"],
+    "workday_indicators": ["WORKER_ID", "ACADEMIC_PERSON", "LEGAL_FIRST_NAME", "LEGAL_LAST_NAME"],
+    "colleague_indicators": ["PERSON_ID", "ACAD_PROGRAM", "COURSE_SEC"],
+    "jenzabar_indicators": ["ID_NUM", "CRS_CDE", "DEPT_CDE"]
+  }
+}
