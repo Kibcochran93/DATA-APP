@@ -336,12 +336,24 @@ def render_step_validation(wizard_state: WizardState) -> None:
         try:
             from utils.seats_validator import validate_dataset
             from components.validation_error_panel import render_validation_panel, export_errors_to_csv
+            from utils.data_quality import analyze_data_quality, DataQualityReport
+            from utils.seats_data_handler import load_spec_by_type
             
-            # Run validation against Master Spec
+            # Load spec for data quality analysis
+            try:
+                spec = load_spec_by_type(dataset_type)
+            except Exception:
+                spec = None
+            
+            # Run SEATS spec validation
             validation_result = validate_dataset(df_mapped, dataset_type)
             
-            # Store validation result for later steps
+            # Run data quality analysis
+            quality_report = analyze_data_quality(df_mapped, spec)
+            
+            # Store results for later steps
             wizard_state.set_data("validation_result", validation_result)
+            wizard_state.set_data("quality_report", quality_report)
             wizard_state.set_data("dataframe_mapped", df_mapped)
             
             # Convert to legacy format for compatibility with other steps
@@ -355,6 +367,53 @@ def render_step_validation(wizard_state: WizardState) -> None:
                 "rows_affected": validation_result.to_summary()["rows_affected"],
             }
             wizard_state.set_data("validation_results", validation_results)
+            
+            # Display Data Quality Issues first
+            quality_summary = quality_report.to_summary()
+            if quality_summary["total_issues"] > 0:
+                st.markdown("### Data Quality Issues")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Issues", quality_summary["total_issues"])
+                with col2:
+                    st.metric("Auto-Fixable", quality_summary["fixable_issues"])
+                with col3:
+                    errors = quality_summary["by_severity"].get("error", 0)
+                    st.metric("Errors", errors)
+                with col4:
+                    warnings = quality_summary["by_severity"].get("warning", 0)
+                    st.metric("Warnings", warnings)
+                
+                # Issues by type
+                with st.expander("Issues by Type", expanded=False):
+                    for issue_type, count in quality_summary["by_type"].items():
+                        icon = {
+                            "id_field": "🔢",
+                            "date_time": "📅",
+                            "text_encoding": "📝",
+                            "multi_value": "📋",
+                            "enum_field": "📊",
+                            "structural": "🏗️"
+                        }.get(issue_type, "❓")
+                        st.write(f"{icon} **{issue_type.replace('_', ' ').title()}**: {count} issue(s)")
+                
+                # Sample issues
+                with st.expander("Sample Issues (first 20)", expanded=False):
+                    for issue in quality_report.issues[:20]:
+                        severity_color = {
+                            "error": "🔴",
+                            "warning": "🟡",
+                            "info": "🔵"
+                        }.get(issue.severity.value, "⚪")
+                        
+                        row_info = f"Row {issue.row_index}" if issue.row_index is not None else "All rows"
+                        col_info = f"[{issue.column}]" if issue.column else ""
+                        fix_info = f" → Fix: `{issue.suggested_fix}`" if issue.can_auto_fix and issue.suggested_fix else ""
+                        
+                        st.markdown(f"{severity_color} **{row_info}** {col_info}: {issue.message}{fix_info}")
+                
+                st.markdown("---")
             
             # Render the validation error panel with cell highlighting
             render_validation_panel(
@@ -523,6 +582,7 @@ def render_step_autofix(wizard_state: WizardState) -> None:
     results = wizard_state.get_data("validation_results", {})
     df = wizard_state.get_data("dataframe_mapped")
     dataset_type = wizard_state.get_data("dataset_type")
+    quality_report = wizard_state.get_data("quality_report")
     
     if df is None:
         st.error("No data loaded. Please go back to upload.")
@@ -539,6 +599,13 @@ def render_step_autofix(wizard_state: WizardState) -> None:
             detect_out_of_spec_columns,
             fix_column_names_and_order
         )
+        from utils.data_quality import (
+            analyze_data_quality,
+            fix_data_quality,
+            DataQualityFixer,
+            IssueType
+        )
+        
         spec = load_spec_by_type(dataset_type)
         missing_cols = get_missing_columns(df, spec)
         variations = detect_column_variations(df, spec)
@@ -547,6 +614,12 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         mandatory_fields = spec.get('mandatory_fields', [])
         missing_mandatory = [col for col in missing_cols if col in mandatory_fields]
         missing_optional = [col for col in missing_cols if col not in mandatory_fields]
+        
+        # Re-analyze quality if not available
+        if quality_report is None:
+            quality_report = analyze_data_quality(df, spec)
+            wizard_state.set_data("quality_report", quality_report)
+        
     except Exception as e:
         log_exception(e, logger, {"action": "load_spec_for_autofix"})
         spec = None
@@ -556,11 +629,13 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         variations = {}
         duplicates = {}
         out_of_spec = []
+        quality_report = None
     
     has_validation_errors = results and results.get("total_errors", 0) > 0
     has_column_issues = len(missing_cols) > 0 or len(variations) > 0 or len(duplicates) > 0
+    has_quality_issues = quality_report and quality_report.to_summary()["total_issues"] > 0
     
-    if not has_validation_errors and not has_column_issues:
+    if not has_validation_errors and not has_column_issues and not has_quality_issues:
         st.success("No issues to fix. You can proceed to review.")
     else:
         st.info("Select which issues to auto-fix:")
@@ -660,12 +735,96 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         st.markdown("---")
         
         # ============================================
-        # Section 2: Data Value Fixes
+        # Section 2: Data Quality Fixes
         # ============================================
-        st.markdown("#### Data Value Fixes")
+        if has_quality_issues and quality_report:
+            st.markdown("#### Data Quality Fixes")
+            
+            quality_summary = quality_report.to_summary()
+            fixable_count = quality_summary["fixable_issues"]
+            
+            st.write(f"Found **{quality_summary['total_issues']}** data quality issues ({fixable_count} auto-fixable)")
+            
+            # Group fixes by type
+            fix_id_fields = False
+            fix_date_time = False
+            fix_encoding = False
+            fix_multi_value = False
+            fix_enums = False
+            fix_structural = False
+            
+            by_type = quality_summary.get("by_type", {})
+            
+            if by_type.get("id_field", 0) > 0:
+                id_issues = quality_report.get_by_type(IssueType.ID_FIELD)
+                fixable_ids = len([i for i in id_issues if i.can_auto_fix])
+                fix_id_fields = st.checkbox(
+                    f"🔢 Fix ID field issues ({by_type['id_field']} issues, {fixable_ids} fixable)",
+                    value=True,
+                    help="Fixes scientific notation, decimal points, special characters in ID fields"
+                )
+            
+            if by_type.get("date_time", 0) > 0:
+                dt_issues = quality_report.get_by_type(IssueType.DATE_TIME)
+                fixable_dt = len([i for i in dt_issues if i.can_auto_fix])
+                fix_date_time = st.checkbox(
+                    f"📅 Fix date/time issues ({by_type['date_time']} issues, {fixable_dt} fixable)",
+                    value=True,
+                    help="Fixes date formats, Excel serial numbers, time formats, missing leading zeros"
+                )
+            
+            if by_type.get("text_encoding", 0) > 0:
+                enc_issues = quality_report.get_by_type(IssueType.TEXT_ENCODING)
+                fixable_enc = len([i for i in enc_issues if i.can_auto_fix])
+                fix_encoding = st.checkbox(
+                    f"📝 Fix text/encoding issues ({by_type['text_encoding']} issues, {fixable_enc} fixable)",
+                    value=True,
+                    help="Removes BOM, hidden characters, non-breaking spaces, zero-width characters"
+                )
+            
+            if by_type.get("multi_value", 0) > 0:
+                mv_issues = quality_report.get_by_type(IssueType.MULTI_VALUE)
+                fixable_mv = len([i for i in mv_issues if i.can_auto_fix])
+                fix_multi_value = st.checkbox(
+                    f"📋 Fix multi-value field issues ({by_type['multi_value']} issues, {fixable_mv} fixable)",
+                    value=True,
+                    help="Fixes wrong separators (comma instead of /), extra spaces around separators"
+                )
+            
+            if by_type.get("enum_field", 0) > 0:
+                enum_issues = quality_report.get_by_type(IssueType.ENUM_FIELD)
+                fixable_enum = len([i for i in enum_issues if i.can_auto_fix])
+                fix_enums = st.checkbox(
+                    f"📊 Fix enum field issues ({by_type['enum_field']} issues, {fixable_enum} fixable)",
+                    value=True,
+                    help="Fixes case issues, expands abbreviations (e.g., 'Male' to 'M')"
+                )
+            
+            if by_type.get("structural", 0) > 0:
+                struct_issues = quality_report.get_by_type(IssueType.STRUCTURAL)
+                fixable_struct = len([i for i in struct_issues if i.can_auto_fix])
+                fix_structural = st.checkbox(
+                    f"🏗️ Fix structural issues ({by_type['structural']} issues, {fixable_struct} fixable)",
+                    value=True,
+                    help="Removes empty rows, duplicate header rows, footer/summary rows"
+                )
+        else:
+            fix_id_fields = False
+            fix_date_time = False
+            fix_encoding = False
+            fix_multi_value = False
+            fix_enums = False
+            fix_structural = False
+        
+        st.markdown("---")
+        
+        # ============================================
+        # Section 3: Basic Data Fixes (fallback)
+        # ============================================
+        st.markdown("#### Additional Data Fixes")
         fix_whitespace = st.checkbox("Trim whitespace from all text fields", value=True)
-        fix_case = st.checkbox("Standardize case for enum fields (uppercase)", value=True)
-        fix_dates = st.checkbox("Standardize date formats to YYYY-MM-DD", value=True)
+        fix_case = st.checkbox("Standardize case for enum fields (uppercase)", value=not fix_enums)
+        fix_dates_basic = st.checkbox("Standardize date formats to YYYY-MM-DD", value=not fix_date_time)
         
         # ============================================
         # Apply Fixes Button
@@ -697,15 +856,33 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                         if report['reordered']:
                             fixes_applied.append("Reordered columns to match spec")
                     
-                    # Fix 2: Trim whitespace
+                    # Fix 2: Data quality fixes
+                    if quality_report and (fix_id_fields or fix_date_time or fix_encoding or fix_multi_value or fix_enums or fix_structural):
+                        df_fixed, fix_counts = fix_data_quality(
+                            df_fixed, quality_report, spec,
+                            fix_ids=fix_id_fields,
+                            fix_dates=fix_date_time,
+                            fix_times=fix_date_time,
+                            fix_encoding=fix_encoding,
+                            fix_multi_value=fix_multi_value,
+                            fix_enums=fix_enums,
+                            fix_structural=fix_structural
+                        )
+                        
+                        for fix_type, count in fix_counts.items():
+                            if count > 0:
+                                type_label = fix_type.replace('_', ' ').title()
+                                fixes_applied.append(f"Fixed {count} {type_label} issue(s)")
+                    
+                    # Fix 3: Basic whitespace trimming
                     if fix_whitespace:
                         for col in df_fixed.select_dtypes(include=["object"]).columns:
                             df_fixed[col] = df_fixed[col].astype(str).str.strip()
                             df_fixed[col] = df_fixed[col].replace('nan', '')
                         fixes_applied.append("Trimmed whitespace")
                     
-                    # Fix 3: Standardize case for enum fields
-                    if fix_case and spec:
+                    # Fix 4: Standardize case for enum fields (basic)
+                    if fix_case and spec and not fix_enums:
                         fields_spec = spec.get('fields', {})
                         enum_fixed = 0
                         for field_name, field_def in fields_spec.items():
@@ -723,8 +900,8 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                         if enum_fixed > 0:
                             fixes_applied.append(f"Standardized case for {enum_fixed} enum field(s)")
                     
-                    # Fix 4: Date formats
-                    if fix_dates and spec:
+                    # Fix 5: Date formats (basic)
+                    if fix_dates_basic and spec and not fix_date_time:
                         fields_spec = spec.get('fields', {})
                         dates_fixed = 0
                         for field_name, field_def in fields_spec.items():
@@ -762,11 +939,11 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                     col1, col2 = st.columns(2)
                     with col1:
                         st.markdown("**Before:**")
-                        st.write(f"{len(df.columns)} columns")
+                        st.write(f"{len(df.columns)} columns, {len(df)} rows")
                         st.caption(", ".join(df.columns[:10]) + ("..." if len(df.columns) > 10 else ""))
                     with col2:
                         st.markdown("**After:**")
-                        st.write(f"{len(df_fixed.columns)} columns")
+                        st.write(f"{len(df_fixed.columns)} columns, {len(df_fixed)} rows")
                         st.caption(", ".join(df_fixed.columns[:10]) + ("..." if len(df_fixed.columns) > 10 else ""))
                     
                     # Show preview of fixed data
