@@ -278,6 +278,11 @@ class ValidationErrorPanel:
         </div>
         """, unsafe_allow_html=True)
     
+    # Maximum cells for styled rendering (prevents Pandas Styler overflow)
+    MAX_STYLED_CELLS = 500000
+    # Number of rows to show when using partial styling
+    PARTIAL_STYLE_ROWS = 1000
+    
     def _render_highlighted_dataframe(
         self,
         df: pd.DataFrame,
@@ -307,13 +312,35 @@ class ValidationErrorPanel:
             new_order = error_rows_in_display + non_error_rows
             display_df = display_df.loc[new_order]
         
+        # Calculate total cells for styling decision
+        total_cells = display_df.shape[0] * display_df.shape[1]
+        
+        # Check if dataframe is too large for full styling
+        if total_cells > self.MAX_STYLED_CELLS:
+            self._render_large_dataframe(display_df, error_cells, error_rows, df)
+        else:
+            self._render_styled_dataframe(display_df, error_cells, error_rows, df)
+        
+        return display_df
+    
+    def _render_styled_dataframe(
+        self,
+        display_df: pd.DataFrame,
+        error_cells: list,
+        error_rows: list,
+        original_df: pd.DataFrame
+    ) -> None:
+        """Render dataframe with full error cell highlighting."""
+        # Convert error_cells to set for faster lookup
+        error_cells_set = set(error_cells)
+        
         # Create style function
         def highlight_errors(row):
             styles = [''] * len(row)
             row_idx = row.name
             
             for i, col in enumerate(row.index):
-                if (row_idx, col) in error_cells:
+                if (row_idx, col) in error_cells_set:
                     styles[i] = (
                         'background-color: #fff3cd; '
                         'border: 2px solid #ffc107; '
@@ -334,11 +361,78 @@ class ValidationErrorPanel:
         
         # Row count info
         if st.session_state.get(f"{self.key_prefix}_filter_errors_only", False):
-            st.caption(f"Showing {len(display_df)} rows with errors out of {len(df)} total rows")
+            st.caption(f"Showing {len(display_df)} rows with errors out of {len(original_df)} total rows")
         else:
             st.caption(f"Showing {len(display_df)} rows ({len(error_rows)} with errors)")
+    
+    def _render_large_dataframe(
+        self,
+        display_df: pd.DataFrame,
+        error_cells: list,
+        error_rows: list,
+        original_df: pd.DataFrame
+    ) -> None:
+        """Render large dataframe with optional partial styling."""
+        total_cells = display_df.shape[0] * display_df.shape[1]
         
-        return display_df
+        # Info message about styling being disabled
+        st.info(
+            f"Cell highlighting is disabled for performance "
+            f"({total_cells:,} cells exceeds {self.MAX_STYLED_CELLS:,} limit). "
+            f"Error details are still available in the panels above."
+        )
+        
+        # Toggle for partial styling
+        show_partial = st.toggle(
+            f"Show first {self.PARTIAL_STYLE_ROWS} rows with highlighting",
+            value=False,
+            key=f"{self.key_prefix}_partial_style_toggle"
+        )
+        
+        if show_partial:
+            # Show first N rows with styling
+            partial_df = display_df.head(self.PARTIAL_STYLE_ROWS).copy()
+            error_cells_set = set(error_cells)
+            
+            def highlight_errors(row):
+                styles = [''] * len(row)
+                row_idx = row.name
+                
+                for i, col in enumerate(row.index):
+                    if (row_idx, col) in error_cells_set:
+                        styles[i] = (
+                            'background-color: #fff3cd; '
+                            'border: 2px solid #ffc107; '
+                            'color: #856404;'
+                        )
+                
+                return styles
+            
+            styled_df = partial_df.style.apply(highlight_errors, axis=1)
+            
+            st.dataframe(
+                styled_df,
+                width='stretch',
+                height=400
+            )
+            
+            st.caption(
+                f"Showing first {len(partial_df)} rows with highlighting "
+                f"(of {len(display_df)} total, {len(error_rows)} with errors)"
+            )
+        else:
+            # Show full dataframe without styling
+            st.dataframe(
+                display_df,
+                width='stretch',
+                height=400
+            )
+            
+            # Row count info
+            if st.session_state.get(f"{self.key_prefix}_filter_errors_only", False):
+                st.caption(f"Showing {len(display_df)} rows with errors out of {len(original_df)} total rows")
+            else:
+                st.caption(f"Showing {len(display_df)} rows ({len(error_rows)} with errors)")
 
 
 def render_validation_panel(
