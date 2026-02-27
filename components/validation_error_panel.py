@@ -278,8 +278,9 @@ class ValidationErrorPanel:
         </div>
         """, unsafe_allow_html=True)
     
-    # Maximum cells for styled rendering (prevents Pandas Styler overflow)
-    MAX_STYLED_CELLS = 500000
+    # Maximum cells for styled rendering (Pandas default is 262144)
+    # Set slightly below to account for any overhead
+    MAX_STYLED_CELLS = 250000
     # Number of rows to show when using partial styling
     PARTIAL_STYLE_ROWS = 1000
     
