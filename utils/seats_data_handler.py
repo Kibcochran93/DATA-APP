@@ -1142,6 +1142,268 @@ def get_missing_columns(df: pd.DataFrame, spec: Dict[str, Any]) -> List[str]:
     return missing
 
 
+def detect_column_variations(
+    df: pd.DataFrame,
+    spec: Dict[str, Any]
+) -> Dict[str, Tuple[str, str]]:
+    """
+    Detect columns that appear to be variations of spec columns.
+    
+    Checks for:
+    - Suffix patterns like _x, _y, _1, _2 (from pandas merge)
+    - Common naming variations
+    - Case differences
+    
+    Args:
+        df: DataFrame to check
+        spec: Master spec dictionary
+        
+    Returns:
+        Dict mapping current column name to (spec_column, reason)
+    """
+    variations = {}
+    spec_fields = set(get_ordered_fields(spec))
+    spec_fields_upper = {f.upper(): f for f in spec_fields}
+    
+    # Common suffix patterns from pandas operations
+    suffix_patterns = ['_x', '_y', '_1', '_2', '_old', '_new', '_copy', '_dup']
+    
+    # Common naming variations mapping
+    naming_variations = {
+        'STUDENT_ID': ['STUDENTID', 'STUDENT_NUMBER', 'STUDENT_NO', 'STU_ID', 'SID'],
+        'EVENT_ID': ['EVENTID', 'EVENT_CODE', 'EVT_ID', 'SCHEDULE_ID'],
+        'COURSE_ID': ['COURSEID', 'COURSE_CODE', 'PROGRAMME_ID', 'PROG_ID'],
+        'MODULE_ID': ['MODULEID', 'MODULE_CODE', 'MOD_ID'],
+        'SCHOOL_ID': ['SCHOOLID', 'SCHOOL_CODE', 'DEPT_ID', 'DEPARTMENT_ID'],
+        'ROOM_ID': ['ROOMID', 'ROOM_CODE', 'LOCATION_ID'],
+        'TUTOR_ID': ['TUTORID', 'INSTRUCTOR_ID', 'TEACHER_ID', 'STAFF_ID'],
+        'STAFF_NUMBER': ['STAFF_ID', 'STAFFID', 'EMPLOYEE_ID', 'EMP_ID'],
+        'FORENAME': ['FIRST_NAME', 'FIRSTNAME', 'GIVEN_NAME', 'FNAME'],
+        'LAST_NAME': ['LASTNAME', 'SURNAME', 'FAMILY_NAME', 'LNAME'],
+    }
+    
+    for col in df.columns:
+        col_upper = col.upper()
+        
+        # Skip if exact match exists
+        if col_upper in spec_fields_upper:
+            continue
+        
+        # Check for suffix patterns
+        for suffix in suffix_patterns:
+            if col_upper.endswith(suffix.upper()):
+                base_name = col_upper[:-len(suffix)]
+                if base_name in spec_fields_upper:
+                    variations[col] = (spec_fields_upper[base_name], f"Remove '{suffix}' suffix")
+                    break
+        
+        if col in variations:
+            continue
+        
+        # Check naming variations
+        for spec_col, var_list in naming_variations.items():
+            if spec_col.upper() in spec_fields_upper:
+                if col_upper in [v.upper() for v in var_list]:
+                    variations[col] = (spec_col, "Common naming variation")
+                    break
+    
+    return variations
+
+
+def detect_duplicate_columns(
+    df: pd.DataFrame,
+    spec: Dict[str, Any]
+) -> Dict[str, List[str]]:
+    """
+    Detect duplicate columns that map to the same spec field.
+    
+    Args:
+        df: DataFrame to check
+        spec: Master spec dictionary
+        
+    Returns:
+        Dict mapping spec field to list of duplicate column names
+    """
+    spec_fields_upper = {f.upper(): f for f in get_ordered_fields(spec)}
+    
+    # Track which df columns map to which spec fields
+    field_mappings: Dict[str, List[str]] = {}
+    
+    variations = detect_column_variations(df, spec)
+    
+    for col in df.columns:
+        col_upper = col.upper()
+        
+        # Direct match
+        if col_upper in spec_fields_upper:
+            spec_field = spec_fields_upper[col_upper]
+            if spec_field not in field_mappings:
+                field_mappings[spec_field] = []
+            field_mappings[spec_field].append(col)
+        
+        # Variation match
+        elif col in variations:
+            spec_field = variations[col][0]
+            if spec_field not in field_mappings:
+                field_mappings[spec_field] = []
+            field_mappings[spec_field].append(col)
+    
+    # Return only fields with duplicates
+    return {k: v for k, v in field_mappings.items() if len(v) > 1}
+
+
+def detect_out_of_spec_columns(
+    df: pd.DataFrame,
+    spec: Dict[str, Any]
+) -> List[str]:
+    """
+    Detect columns that are not in the spec and not variations.
+    
+    Args:
+        df: DataFrame to check
+        spec: Master spec dictionary
+        
+    Returns:
+        List of column names not in spec
+    """
+    spec_fields_upper = {f.upper() for f in get_ordered_fields(spec)}
+    variations = detect_column_variations(df, spec)
+    
+    out_of_spec = []
+    for col in df.columns:
+        col_upper = col.upper()
+        if col_upper not in spec_fields_upper and col not in variations:
+            out_of_spec.append(col)
+    
+    return out_of_spec
+
+
+def fix_column_names_and_order(
+    df: pd.DataFrame,
+    spec: Dict[str, Any],
+    rename_variations: bool = True,
+    remove_duplicates: bool = True,
+    remove_out_of_spec: bool = False,
+    insert_missing: bool = True
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Fix column names and reorder to match spec.
+    
+    Args:
+        df: DataFrame to fix
+        spec: Master spec dictionary
+        rename_variations: Rename variation columns to spec names
+        remove_duplicates: Remove duplicate columns (keeps first with data)
+        remove_out_of_spec: Remove columns not in spec
+        insert_missing: Insert missing columns with empty values
+        
+    Returns:
+        Tuple of (fixed DataFrame, report dict)
+    """
+    report = {
+        'renamed': [],
+        'removed_duplicates': [],
+        'removed_out_of_spec': [],
+        'inserted': [],
+        'reordered': False
+    }
+    
+    df_fixed = df.copy()
+    ordered_fields = get_ordered_fields(spec)
+    spec_fields_upper = {f.upper(): f for f in ordered_fields}
+    
+    # Step 1: Rename variation columns
+    if rename_variations:
+        variations = detect_column_variations(df_fixed, spec)
+        rename_map = {}
+        
+        for old_col, (new_col, reason) in variations.items():
+            # Check if target column already exists
+            if new_col not in df_fixed.columns and new_col.upper() not in {c.upper() for c in df_fixed.columns}:
+                rename_map[old_col] = new_col
+                report['renamed'].append({
+                    'from': old_col,
+                    'to': new_col,
+                    'reason': reason
+                })
+        
+        if rename_map:
+            df_fixed = df_fixed.rename(columns=rename_map)
+    
+    # Step 2: Handle duplicates
+    if remove_duplicates:
+        duplicates = detect_duplicate_columns(df_fixed, spec)
+        
+        for spec_field, dup_cols in duplicates.items():
+            # Find the best column to keep (prefer exact match, then most non-null data)
+            best_col = None
+            best_score = -1
+            
+            for col in dup_cols:
+                score = 0
+                # Prefer exact case match
+                if col == spec_field:
+                    score += 1000
+                elif col.upper() == spec_field.upper():
+                    score += 500
+                # Add non-null count
+                score += df_fixed[col].notna().sum()
+                
+                if score > best_score:
+                    best_score = score
+                    best_col = col
+            
+            # Remove other columns, rename best to spec name
+            for col in dup_cols:
+                if col != best_col:
+                    df_fixed = df_fixed.drop(columns=[col])
+                    report['removed_duplicates'].append({
+                        'column': col,
+                        'kept': best_col,
+                        'spec_field': spec_field
+                    })
+            
+            # Rename if needed
+            if best_col != spec_field:
+                df_fixed = df_fixed.rename(columns={best_col: spec_field})
+    
+    # Step 3: Remove out-of-spec columns
+    if remove_out_of_spec:
+        out_of_spec = detect_out_of_spec_columns(df_fixed, spec)
+        for col in out_of_spec:
+            df_fixed = df_fixed.drop(columns=[col])
+            report['removed_out_of_spec'].append(col)
+    
+    # Step 4: Insert missing columns
+    if insert_missing:
+        current_cols_upper = {c.upper(): c for c in df_fixed.columns}
+        for field in ordered_fields:
+            if field.upper() not in current_cols_upper:
+                df_fixed[field] = ''
+                report['inserted'].append(field)
+    
+    # Step 5: Reorder columns to match spec
+    current_cols_upper = {c.upper(): c for c in df_fixed.columns}
+    new_order = []
+    
+    # Add spec columns in order
+    for field in ordered_fields:
+        if field.upper() in current_cols_upper:
+            new_order.append(current_cols_upper[field.upper()])
+    
+    # Add remaining columns (out of spec) at end
+    for col in df_fixed.columns:
+        if col not in new_order:
+            new_order.append(col)
+    
+    if new_order != list(df_fixed.columns):
+        report['reordered'] = True
+    
+    df_fixed = df_fixed[new_order]
+    
+    return df_fixed, report
+
+
 def insert_missing_columns(
     df: pd.DataFrame,
     spec: Dict[str, Any],
@@ -1159,40 +1421,14 @@ def insert_missing_columns(
     Returns:
         DataFrame with missing columns inserted in correct positions
     """
-    ordered_fields = get_ordered_fields(spec)
-    
-    if columns_to_insert is None:
-        columns_to_insert = get_missing_columns(df, spec)
-    
-    if not columns_to_insert:
-        return df
-    
-    # Create a mapping of current columns (case-insensitive)
-    current_cols = {col.upper(): col for col in df.columns}
-    
-    # Build the new column order
-    new_columns = []
-    df_copy = df.copy()
-    
-    for field in ordered_fields:
-        field_upper = field.upper()
-        
-        if field_upper in current_cols:
-            # Column exists, use original case
-            new_columns.append(current_cols[field_upper])
-        elif field in columns_to_insert:
-            # Add missing column with empty string values
-            df_copy[field] = ''
-            new_columns.append(field)
-    
-    # Add any columns from df that aren't in the spec (at the end)
-    for col in df.columns:
-        if col.upper() not in {f.upper() for f in ordered_fields}:
-            if col not in new_columns:
-                new_columns.append(col)
-    
-    # Reorder dataframe
-    return df_copy[new_columns]
+    df_fixed, _ = fix_column_names_and_order(
+        df, spec,
+        rename_variations=False,
+        remove_duplicates=False,
+        remove_out_of_spec=False,
+        insert_missing=True
+    )
+    return df_fixed
 
 
 __all__ = [
@@ -1205,6 +1441,10 @@ __all__ = [
     'get_ordered_fields',
     'get_missing_columns',
     'insert_missing_columns',
+    'detect_column_variations',
+    'detect_duplicate_columns',
+    'detect_out_of_spec_columns',
+    'fix_column_names_and_order',
     'MultiValueField',
     'CrossFileValidationResult',
     'LEADING_ZERO_FIELDS',

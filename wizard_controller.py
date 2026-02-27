@@ -528,15 +528,22 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         st.error("No data loaded. Please go back to upload.")
         return
     
-    # Load spec to check for missing columns
+    # Load spec and analyze column issues
     try:
         from utils.seats_data_handler import (
             load_spec_by_type,
             get_missing_columns,
-            get_ordered_fields
+            get_ordered_fields,
+            detect_column_variations,
+            detect_duplicate_columns,
+            detect_out_of_spec_columns,
+            fix_column_names_and_order
         )
         spec = load_spec_by_type(dataset_type)
         missing_cols = get_missing_columns(df, spec)
+        variations = detect_column_variations(df, spec)
+        duplicates = detect_duplicate_columns(df, spec)
+        out_of_spec = detect_out_of_spec_columns(df, spec)
         mandatory_fields = spec.get('mandatory_fields', [])
         missing_mandatory = [col for col in missing_cols if col in mandatory_fields]
         missing_optional = [col for col in missing_cols if col not in mandatory_fields]
@@ -546,86 +553,163 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         missing_cols = []
         missing_mandatory = []
         missing_optional = []
+        variations = {}
+        duplicates = {}
+        out_of_spec = []
     
     has_validation_errors = results and results.get("total_errors", 0) > 0
-    has_missing_columns = len(missing_cols) > 0
+    has_column_issues = len(missing_cols) > 0 or len(variations) > 0 or len(duplicates) > 0
     
-    if not has_validation_errors and not has_missing_columns:
+    if not has_validation_errors and not has_column_issues:
         st.success("No issues to fix. You can proceed to review.")
     else:
         st.info("Select which issues to auto-fix:")
         
-        # Section 1: Missing Columns
-        if has_missing_columns:
-            st.markdown("#### Missing Columns")
+        # ============================================
+        # Section 1: Column Structure Fixes
+        # ============================================
+        if has_column_issues or out_of_spec:
+            st.markdown("#### Column Structure Fixes")
             
-            if missing_mandatory:
-                st.warning(f"**{len(missing_mandatory)} mandatory column(s) missing:** {', '.join(missing_mandatory)}")
+            # 1a: Column variations (e.g., STUDENT_ID_x -> STUDENT_ID)
+            fix_variations = False
+            if variations:
+                st.warning(f"**{len(variations)} column(s) detected as variations** of spec columns")
+                fix_variations = st.checkbox(
+                    f"Rename {len(variations)} column variation(s) to correct spec names",
+                    value=True,
+                    help="Columns like 'STUDENT_ID_x' will be renamed to 'STUDENT_ID'"
+                )
+                if fix_variations:
+                    with st.expander("Column variations to rename", expanded=False):
+                        for old_col, (new_col, reason) in variations.items():
+                            st.write(f"- `{old_col}` → `{new_col}` ({reason})")
             
-            if missing_optional:
-                st.caption(f"{len(missing_optional)} optional column(s) missing: {', '.join(missing_optional[:5])}{'...' if len(missing_optional) > 5 else ''}")
+            # 1b: Duplicate columns
+            fix_duplicates = False
+            if duplicates:
+                st.warning(f"**{len(duplicates)} spec field(s) have duplicate columns**")
+                fix_duplicates = st.checkbox(
+                    f"Remove duplicate columns (keep column with most data)",
+                    value=True,
+                    help="When multiple columns map to the same spec field, keeps the one with most non-empty values"
+                )
+                if fix_duplicates:
+                    with st.expander("Duplicate columns to resolve", expanded=False):
+                        for spec_field, dup_cols in duplicates.items():
+                            st.write(f"- **{spec_field}**: {', '.join([f'`{c}`' for c in dup_cols])}")
             
-            fix_missing_cols = st.checkbox(
-                f"Insert {len(missing_cols)} missing column(s) in correct spec order",
-                value=len(missing_mandatory) > 0,
-                help="Adds empty columns for all missing fields in the position defined by the SEATS spec"
-            )
-            
-            if fix_missing_cols:
-                # Show which columns will be added
-                with st.expander("Columns to be inserted", expanded=False):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("**Mandatory:**")
-                        for col in missing_mandatory:
-                            st.write(f"- {col}")
-                        if not missing_mandatory:
-                            st.write("None")
-                    with col2:
-                        st.markdown("**Optional:**")
-                        for col in missing_optional[:10]:
-                            st.write(f"- {col}")
-                        if len(missing_optional) > 10:
-                            st.write(f"... and {len(missing_optional) - 10} more")
-                        if not missing_optional:
-                            st.write("None")
-        else:
+            # 1c: Missing columns
             fix_missing_cols = False
+            if missing_cols:
+                if missing_mandatory:
+                    st.warning(f"**{len(missing_mandatory)} mandatory column(s) missing:** {', '.join(missing_mandatory)}")
+                if missing_optional:
+                    st.caption(f"{len(missing_optional)} optional column(s) missing")
+                
+                fix_missing_cols = st.checkbox(
+                    f"Insert {len(missing_cols)} missing column(s) in correct spec order",
+                    value=len(missing_mandatory) > 0,
+                    help="Adds empty columns for all missing fields in the position defined by the SEATS spec"
+                )
+                if fix_missing_cols:
+                    with st.expander("Columns to be inserted", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("**Mandatory:**")
+                            for col in missing_mandatory:
+                                st.write(f"- {col}")
+                            if not missing_mandatory:
+                                st.write("None")
+                        with col2:
+                            st.markdown("**Optional:**")
+                            for col in missing_optional[:10]:
+                                st.write(f"- {col}")
+                            if len(missing_optional) > 10:
+                                st.write(f"... and {len(missing_optional) - 10} more")
+                            if not missing_optional:
+                                st.write("None")
+            
+            # 1d: Out of spec columns
+            fix_out_of_spec = False
+            if out_of_spec:
+                st.info(f"**{len(out_of_spec)} column(s) not in spec:** {', '.join(out_of_spec[:5])}{'...' if len(out_of_spec) > 5 else ''}")
+                fix_out_of_spec = st.checkbox(
+                    f"Remove {len(out_of_spec)} column(s) not in spec",
+                    value=False,
+                    help="Removes columns that are not part of the SEATS specification (use with caution)"
+                )
+                if fix_out_of_spec:
+                    with st.expander("Columns to be removed", expanded=False):
+                        for col in out_of_spec:
+                            st.write(f"- `{col}`")
+            
+            # 1e: Reorder columns
+            fix_order = st.checkbox(
+                "Reorder all columns to match spec order",
+                value=True,
+                help="Rearranges columns to match the order defined in the SEATS specification"
+            )
+        else:
+            fix_variations = False
+            fix_duplicates = False
+            fix_missing_cols = False
+            fix_out_of_spec = False
+            fix_order = False
         
         st.markdown("---")
         
-        # Section 2: Data Fixes
-        st.markdown("#### Data Fixes")
-        fix_whitespace = st.checkbox("Trim whitespace", value=True)
-        fix_case = st.checkbox("Standardize case (uppercase for enum fields)", value=True)
-        fix_dates = st.checkbox("Fix date formats", value=True)
+        # ============================================
+        # Section 2: Data Value Fixes
+        # ============================================
+        st.markdown("#### Data Value Fixes")
+        fix_whitespace = st.checkbox("Trim whitespace from all text fields", value=True)
+        fix_case = st.checkbox("Standardize case for enum fields (uppercase)", value=True)
+        fix_dates = st.checkbox("Standardize date formats to YYYY-MM-DD", value=True)
         
+        # ============================================
+        # Apply Fixes Button
+        # ============================================
         if st.button("Apply Fixes", type="primary"):
             with st.spinner("Applying fixes..."):
                 try:
                     df_fixed = df.copy()
                     fixes_applied = []
                     
-                    # Fix 1: Insert missing columns
-                    if fix_missing_cols and spec:
-                        from utils.seats_data_handler import insert_missing_columns
-                        df_fixed = insert_missing_columns(df_fixed, spec)
-                        fixes_applied.append(f"Inserted {len(missing_cols)} missing columns")
+                    # Fix 1: Column structure fixes (all in one operation)
+                    if spec and (fix_variations or fix_duplicates or fix_missing_cols or fix_out_of_spec or fix_order):
+                        df_fixed, report = fix_column_names_and_order(
+                            df_fixed, spec,
+                            rename_variations=fix_variations,
+                            remove_duplicates=fix_duplicates,
+                            remove_out_of_spec=fix_out_of_spec,
+                            insert_missing=fix_missing_cols
+                        )
+                        
+                        if report['renamed']:
+                            fixes_applied.append(f"Renamed {len(report['renamed'])} column(s)")
+                        if report['removed_duplicates']:
+                            fixes_applied.append(f"Removed {len(report['removed_duplicates'])} duplicate column(s)")
+                        if report['removed_out_of_spec']:
+                            fixes_applied.append(f"Removed {len(report['removed_out_of_spec'])} out-of-spec column(s)")
+                        if report['inserted']:
+                            fixes_applied.append(f"Inserted {len(report['inserted'])} missing column(s)")
+                        if report['reordered']:
+                            fixes_applied.append("Reordered columns to match spec")
                     
                     # Fix 2: Trim whitespace
                     if fix_whitespace:
                         for col in df_fixed.select_dtypes(include=["object"]).columns:
                             df_fixed[col] = df_fixed[col].astype(str).str.strip()
-                            # Replace 'nan' strings with empty
                             df_fixed[col] = df_fixed[col].replace('nan', '')
                         fixes_applied.append("Trimmed whitespace")
                     
                     # Fix 3: Standardize case for enum fields
                     if fix_case and spec:
                         fields_spec = spec.get('fields', {})
+                        enum_fixed = 0
                         for field_name, field_def in fields_spec.items():
                             if field_def.get('type') == 'enum':
-                                # Find matching column (case-insensitive)
                                 matching_col = None
                                 for col in df_fixed.columns:
                                     if col.upper() == field_name.upper():
@@ -635,14 +719,16 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                                 if matching_col and matching_col in df_fixed.columns:
                                     df_fixed[matching_col] = df_fixed[matching_col].astype(str).str.upper()
                                     df_fixed[matching_col] = df_fixed[matching_col].replace('NAN', '')
-                        fixes_applied.append("Standardized case for enum fields")
+                                    enum_fixed += 1
+                        if enum_fixed > 0:
+                            fixes_applied.append(f"Standardized case for {enum_fixed} enum field(s)")
                     
                     # Fix 4: Date formats
                     if fix_dates and spec:
                         fields_spec = spec.get('fields', {})
+                        dates_fixed = 0
                         for field_name, field_def in fields_spec.items():
                             if field_def.get('type') == 'date':
-                                # Find matching column
                                 matching_col = None
                                 for col in df_fixed.columns:
                                     if col.upper() == field_name.upper():
@@ -651,25 +737,37 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                                 
                                 if matching_col and matching_col in df_fixed.columns:
                                     try:
-                                        # Try to parse and reformat dates
                                         date_col = pd.to_datetime(
                                             df_fixed[matching_col],
                                             errors='coerce',
                                             dayfirst=True
                                         )
-                                        # Format as YYYY-MM-DD
                                         df_fixed[matching_col] = date_col.dt.strftime('%Y-%m-%d')
                                         df_fixed[matching_col] = df_fixed[matching_col].fillna('')
+                                        dates_fixed += 1
                                     except Exception:
-                                        pass  # Skip if date parsing fails
-                        fixes_applied.append("Standardized date formats")
+                                        pass
+                        if dates_fixed > 0:
+                            fixes_applied.append(f"Standardized {dates_fixed} date field(s)")
                     
                     wizard_state.set_data("dataframe_fixed", df_fixed)
                     
                     # Show summary
-                    st.success(f"Fixes applied successfully!")
+                    st.success("Fixes applied successfully!")
                     for fix in fixes_applied:
-                        st.write(f"- {fix}")
+                        st.write(f"✓ {fix}")
+                    
+                    # Show column comparison
+                    st.markdown("#### Column Changes")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**Before:**")
+                        st.write(f"{len(df.columns)} columns")
+                        st.caption(", ".join(df.columns[:10]) + ("..." if len(df.columns) > 10 else ""))
+                    with col2:
+                        st.markdown("**After:**")
+                        st.write(f"{len(df_fixed.columns)} columns")
+                        st.caption(", ".join(df_fixed.columns[:10]) + ("..." if len(df_fixed.columns) > 10 else ""))
                     
                     # Show preview of fixed data
                     st.markdown("#### Preview of Fixed Data")
