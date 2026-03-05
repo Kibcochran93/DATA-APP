@@ -1199,6 +1199,9 @@ def detect_empty_mandatory_fields(
             if field.upper() == 'EVENT_ID':
                 suggestion = 'auto_generate'
                 suggestion_text = 'Auto-generate unique IDs from other fields'
+            elif field_type == 'time' and field.upper() in ('START_TIME', 'END_TIME'):
+                suggestion = 'batch_entry'
+                suggestion_text = 'Enter times per distinct event group (grouped by day/room/module)'
             elif field_type == 'time':
                 suggestion = 'default_value'
                 suggestion_text = 'Set default time value (e.g., 09:00)'
@@ -1306,6 +1309,7 @@ def fill_empty_mandatory_field(
         method: Fill method:
             - 'default': Fill all empty with single value
             - 'auto_generate': Generate unique values (for ID fields)
+            - 'batch': Fill based on group mappings
         **kwargs: Additional arguments for specific methods
         
     Returns:
@@ -1329,6 +1333,39 @@ def fill_empty_mandatory_field(
         # Fill empty values with default
         mask = df[matching_col].isna() | (df[matching_col].astype(str).str.strip() == '')
         df.loc[mask, matching_col] = value
+    
+    elif method == 'batch':
+        # Fill based on group mappings
+        group_values = kwargs.get('group_values', {})  # {group_key: value}
+        group_fields = kwargs.get('group_fields', [])
+        
+        if group_values and group_fields:
+            # Find matching columns for group fields
+            group_cols = []
+            for gf in group_fields:
+                for col in df.columns:
+                    if col.upper() == gf.upper():
+                        group_cols.append(col)
+                        break
+            
+            if group_cols:
+                # Create group key for each row
+                def get_group_key(row):
+                    parts = []
+                    for col in group_cols:
+                        val = row.get(col, '')
+                        if pd.isna(val):
+                            val = ''
+                        parts.append(str(val).strip())
+                    return '|'.join(parts)
+                
+                # Apply values based on group
+                for idx, row in df.iterrows():
+                    current_val = row[matching_col]
+                    if pd.isna(current_val) or str(current_val).strip() == '':
+                        group_key = get_group_key(row)
+                        if group_key in group_values:
+                            df.at[idx, matching_col] = group_values[group_key]
         
     elif method == 'auto_generate':
         # Generate unique values (primarily for EVENT_ID)
@@ -1349,6 +1386,199 @@ def fill_empty_mandatory_field(
             df.loc[mask, matching_col] = [f"{prefix}{i+1:06d}" for i in range(count)]
     
     return df
+
+
+def detect_event_groups(
+    df: pd.DataFrame,
+    group_by_fields: Optional[List[str]] = None
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Detect distinct event groups for batch time entry.
+    
+    Groups events by common fields (e.g., same day + room + module = same class session).
+    This allows entering times once per group instead of per row.
+    
+    Args:
+        df: DataFrame to analyze
+        group_by_fields: Fields to group by. Default: ['DAY', 'ROOM_ID', 'MODULE_ID']
+        
+    Returns:
+        Dict mapping group_key to:
+        - fields: dict of field values for this group
+        - row_count: number of rows in this group
+        - sample_row: index of first row in group
+        - module_name: name of module (for display)
+        - room_name: name of room (for display)
+    """
+    if group_by_fields is None:
+        # Default grouping for timetable events
+        group_by_fields = ['DAY', 'ROOM_ID', 'MODULE_ID']
+    
+    # Find matching columns (case-insensitive)
+    col_map = {col.upper(): col for col in df.columns}
+    available_fields = []
+    actual_cols = []
+    
+    for field in group_by_fields:
+        if field.upper() in col_map:
+            available_fields.append(field)
+            actual_cols.append(col_map[field.upper()])
+    
+    if not actual_cols:
+        return {}
+    
+    # Also get display columns for better UX
+    display_cols = {}
+    for name_field in ['MODULE_NAME', 'ROOM_NAME', 'COURSE_NAME']:
+        if name_field.upper() in col_map:
+            display_cols[name_field] = col_map[name_field.upper()]
+    
+    groups = {}
+    
+    # Group rows
+    for idx, row in df.iterrows():
+        # Build group key
+        key_parts = []
+        field_values = {}
+        
+        for field, col in zip(available_fields, actual_cols):
+            val = row.get(col, '')
+            if pd.isna(val):
+                val = ''
+            val_str = str(val).strip()
+            key_parts.append(val_str)
+            field_values[field] = val_str
+        
+        group_key = '|'.join(key_parts)
+        
+        if group_key not in groups:
+            # Get display values
+            display_values = {}
+            for name_field, col in display_cols.items():
+                val = row.get(col, '')
+                if pd.isna(val):
+                    val = ''
+                display_values[name_field] = str(val).strip()
+            
+            groups[group_key] = {
+                'fields': field_values,
+                'row_count': 0,
+                'sample_row': idx,
+                'row_indices': [],
+                **display_values
+            }
+        
+        groups[group_key]['row_count'] += 1
+        groups[group_key]['row_indices'].append(idx)
+    
+    return groups
+
+
+def get_event_groups_summary(
+    df: pd.DataFrame,
+    group_by_fields: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Get a summary of event groups for display.
+    
+    Args:
+        df: DataFrame to analyze
+        group_by_fields: Fields to group by
+        
+    Returns:
+        Summary dict with:
+        - total_rows: total rows in dataframe
+        - total_groups: number of distinct groups
+        - groups: list of group info for display
+        - group_by_fields: fields used for grouping
+    """
+    groups = detect_event_groups(df, group_by_fields)
+    
+    # Sort groups by row count (largest first) for efficient entry
+    sorted_groups = sorted(
+        groups.items(),
+        key=lambda x: x[1]['row_count'],
+        reverse=True
+    )
+    
+    # Build display-friendly list
+    group_list = []
+    for group_key, info in sorted_groups:
+        display_name = ""
+        if info.get('MODULE_NAME'):
+            display_name = info['MODULE_NAME']
+        elif info['fields'].get('MODULE_ID'):
+            display_name = f"Module {info['fields']['MODULE_ID']}"
+        else:
+            display_name = f"Group {group_key[:20]}..."
+        
+        group_list.append({
+            'key': group_key,
+            'display_name': display_name,
+            'row_count': info['row_count'],
+            'fields': info['fields'],
+            'room': info.get('ROOM_NAME', info['fields'].get('ROOM_ID', '')),
+            'day': info['fields'].get('DAY', ''),
+        })
+    
+    return {
+        'total_rows': len(df),
+        'total_groups': len(groups),
+        'groups': group_list,
+        'group_by_fields': group_by_fields or ['DAY', 'ROOM_ID', 'MODULE_ID']
+    }
+
+
+def apply_batch_times(
+    df: pd.DataFrame,
+    time_mappings: Dict[str, Dict[str, str]],
+    group_by_fields: Optional[List[str]] = None
+) -> Tuple[pd.DataFrame, int]:
+    """
+    Apply batch time entries to dataframe.
+    
+    Args:
+        df: DataFrame to modify
+        time_mappings: Dict mapping group_key to {'start_time': 'HH:MM', 'end_time': 'HH:MM'}
+        group_by_fields: Fields used for grouping
+        
+    Returns:
+        Tuple of (modified DataFrame, count of rows updated)
+    """
+    df = df.copy()
+    groups = detect_event_groups(df, group_by_fields)
+    
+    # Find time columns
+    col_map = {col.upper(): col for col in df.columns}
+    start_col = col_map.get('START_TIME')
+    end_col = col_map.get('END_TIME')
+    
+    if not start_col:
+        df['START_TIME'] = None
+        start_col = 'START_TIME'
+    if not end_col:
+        df['END_TIME'] = None
+        end_col = 'END_TIME'
+    
+    rows_updated = 0
+    
+    for group_key, times in time_mappings.items():
+        if group_key not in groups:
+            continue
+        
+        group_info = groups[group_key]
+        start_time = times.get('start_time', '')
+        end_time = times.get('end_time', '')
+        
+        if start_time or end_time:
+            for idx in group_info['row_indices']:
+                if start_time:
+                    df.at[idx, start_col] = start_time
+                if end_time:
+                    df.at[idx, end_col] = end_time
+                rows_updated += 1
+    
+    return df, rows_updated
 
 
 def detect_column_variations(

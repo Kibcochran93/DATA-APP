@@ -1032,7 +1032,144 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                                 'prefix': prefix
                             }
                             
+                        elif field_info['field_type'] == 'time' and field_info.get('suggestion') == 'batch_entry':
+                            # Batch time entry for START_TIME/END_TIME
+                            st.info("💡 Enter times per distinct event group instead of per row")
+                            
+                            try:
+                                from utils.seats_data_handler import get_event_groups_summary
+                                
+                                # Get event groups
+                                groups_summary = get_event_groups_summary(df)
+                                
+                                st.success(f"Found **{groups_summary['total_groups']:,}** distinct event groups from {groups_summary['total_rows']:,} rows")
+                                st.caption(f"Grouped by: {', '.join(groups_summary['group_by_fields'])}")
+                                
+                                # Check if we need both START_TIME and END_TIME
+                                # Collect them together for better UX
+                                if field_name.upper() == 'START_TIME':
+                                    st.markdown("##### Enter times for each event group:")
+                                    st.caption("Enter START and END times together. Leave blank to skip a group.")
+                                    
+                                    # Store batch times in session state
+                                    batch_key = "batch_time_entries"
+                                    if batch_key not in st.session_state:
+                                        st.session_state[batch_key] = {}
+                                    
+                                    # Show groups in a scrollable container
+                                    groups_to_show = groups_summary['groups'][:50]  # Limit for performance
+                                    
+                                    if len(groups_summary['groups']) > 50:
+                                        st.warning(f"Showing first 50 of {groups_summary['total_groups']} groups. Largest groups shown first.")
+                                    
+                                    # Header row
+                                    header_cols = st.columns([3, 2, 1, 1, 1])
+                                    with header_cols[0]:
+                                        st.markdown("**Module/Event**")
+                                    with header_cols[1]:
+                                        st.markdown("**Room**")
+                                    with header_cols[2]:
+                                        st.markdown("**Rows**")
+                                    with header_cols[3]:
+                                        st.markdown("**Start**")
+                                    with header_cols[4]:
+                                        st.markdown("**End**")
+                                    
+                                    st.markdown("---")
+                                    
+                                    for i, group in enumerate(groups_to_show):
+                                        cols = st.columns([3, 2, 1, 1, 1])
+                                        
+                                        with cols[0]:
+                                            st.caption(group['display_name'][:40])
+                                        with cols[1]:
+                                            st.caption(str(group['room'])[:20] if group['room'] else '-')
+                                        with cols[2]:
+                                            st.caption(f"{group['row_count']:,}")
+                                        with cols[3]:
+                                            start = st.text_input(
+                                                "Start",
+                                                value=st.session_state[batch_key].get(group['key'], {}).get('start_time', ''),
+                                                placeholder="HH:MM",
+                                                key=f"batch_start_{i}",
+                                                label_visibility="collapsed"
+                                            )
+                                        with cols[4]:
+                                            end = st.text_input(
+                                                "End",
+                                                value=st.session_state[batch_key].get(group['key'], {}).get('end_time', ''),
+                                                placeholder="HH:MM",
+                                                key=f"batch_end_{i}",
+                                                label_visibility="collapsed"
+                                            )
+                                        
+                                        # Store in session state
+                                        if start or end:
+                                            st.session_state[batch_key][group['key']] = {
+                                                'start_time': start,
+                                                'end_time': end
+                                            }
+                                    
+                                    # Quick fill options
+                                    st.markdown("---")
+                                    st.markdown("##### Quick Fill Options")
+                                    
+                                    qf_cols = st.columns(4)
+                                    with qf_cols[0]:
+                                        quick_start = st.text_input("Default Start:", value="", placeholder="HH:MM", key="quick_start")
+                                    with qf_cols[1]:
+                                        quick_end = st.text_input("Default End:", value="", placeholder="HH:MM", key="quick_end")
+                                    with qf_cols[2]:
+                                        st.write("")  # Spacing
+                                        if st.button("Apply to Empty", key="apply_quick_fill"):
+                                            for group in groups_summary['groups']:
+                                                if group['key'] not in st.session_state[batch_key]:
+                                                    st.session_state[batch_key][group['key']] = {}
+                                                entry = st.session_state[batch_key][group['key']]
+                                                if not entry.get('start_time') and quick_start:
+                                                    entry['start_time'] = quick_start
+                                                if not entry.get('end_time') and quick_end:
+                                                    entry['end_time'] = quick_end
+                                            st.rerun()
+                                    with qf_cols[3]:
+                                        st.write("")
+                                        if st.button("Clear All", key="clear_batch"):
+                                            st.session_state[batch_key] = {}
+                                            st.rerun()
+                                    
+                                    # Count how many have times entered
+                                    filled_count = sum(1 for v in st.session_state[batch_key].values() 
+                                                      if v.get('start_time') or v.get('end_time'))
+                                    st.info(f"Times entered for {filled_count} of {groups_summary['total_groups']} groups")
+                                    
+                                    # Store for apply step
+                                    empty_mandatory_values['_batch_times'] = {
+                                        'method': 'batch',
+                                        'time_mappings': st.session_state[batch_key],
+                                        'group_by_fields': groups_summary['group_by_fields']
+                                    }
+                                    
+                                else:
+                                    # END_TIME - already handled with START_TIME above
+                                    st.caption("(END_TIME is entered together with START_TIME above)")
+                                
+                            except Exception as e:
+                                log_exception(e, logger, {"action": "batch_time_entry"})
+                                st.error(f"Error loading event groups: {str(e)}")
+                                # Fallback to simple default
+                                default_time = st.text_input(
+                                    f"Default {field_name}:",
+                                    value="09:00" if 'START' in field_name.upper() else "10:00",
+                                    key=f"default_{field_name}"
+                                )
+                                if default_time:
+                                    empty_mandatory_values[field_name] = {
+                                        'method': 'default',
+                                        'value': default_time
+                                    }
+                        
                         elif field_info['field_type'] == 'time':
+                            # Regular time field (not START_TIME/END_TIME)
                             st.info("💡 Enter a default time for all empty rows")
                             
                             col1, col2 = st.columns(2)
@@ -1282,6 +1419,10 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                             from utils.seats_data_handler import fill_empty_mandatory_field
                             
                             for field_name, fill_config in empty_mandatory_values.items():
+                                # Skip special batch_times key
+                                if field_name == '_batch_times':
+                                    continue
+                                    
                                 method = fill_config.get('method', 'default')
                                 
                                 if method == 'auto_generate':
@@ -1304,6 +1445,25 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                                             method='default'
                                         )
                                         fixes_applied.append(f"Set {field_name} = '{value}'")
+                            
+                            # Handle batch time entries
+                            batch_times_config = empty_mandatory_values.get('_batch_times')
+                            if batch_times_config and batch_times_config.get('time_mappings'):
+                                try:
+                                    from utils.seats_data_handler import apply_batch_times
+                                    
+                                    df_fixed, rows_updated = apply_batch_times(
+                                        df_fixed,
+                                        batch_times_config['time_mappings'],
+                                        batch_times_config.get('group_by_fields')
+                                    )
+                                    
+                                    if rows_updated > 0:
+                                        fixes_applied.append(f"Set times for {rows_updated:,} rows via batch entry")
+                                        
+                                except Exception as e:
+                                    log_exception(e, logger, {"action": "apply_batch_times"})
+                                    st.warning(f"Could not apply batch times: {str(e)}")
                                         
                         except Exception as e:
                             log_exception(e, logger, {"action": "fill_empty_mandatory"})
