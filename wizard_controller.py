@@ -172,19 +172,72 @@ def render_step_upload(wizard_state: WizardState) -> None:
 
 
 def render_step_dataset_select(wizard_state: WizardState) -> None:
-    """Render dataset selection step."""
-    st.subheader("Step 2: Select Dataset Type")
+    """Render dataset selection step with hierarchy configuration."""
+    st.subheader("Step 2: Select Dataset Type & Configure Hierarchy")
     
     from config.config import DATASET_TYPES
     
-    dataset_type = st.selectbox(
-        "What type of data is this?",
-        options=DATASET_TYPES,
-        help="Select the dataset type that matches your data"
-    )
+    # Tab layout for cleaner organization
+    tab1, tab2 = st.tabs(["📁 Dataset Type", "🏛️ Data Hierarchy"])
     
-    wizard_state.set_data("dataset_type", dataset_type)
+    with tab1:
+        st.markdown("#### Select Your Dataset Type")
+        
+        dataset_type = st.selectbox(
+            "What type of data is this?",
+            options=DATASET_TYPES,
+            help="Select the dataset type that matches your data"
+        )
+        
+        wizard_state.set_data("dataset_type", dataset_type)
+        
+        # Show dataset info
+        dataset_info = {
+            "Student": "Student enrollment data including demographics, courses, and modules",
+            "StudentTimetable": "Timetable/schedule data linking students to events, rooms, and times",
+            "Staff": "Staff/instructor information and assignments"
+        }
+        
+        if dataset_type in dataset_info:
+            st.info(f"**{dataset_type}:** {dataset_info[dataset_type]}")
+        
+        # Show preview of uploaded data
+        df = wizard_state.get_data("dataframe")
+        if df is not None:
+            with st.expander(f"Preview: {wizard_state.get_data('filename', 'data')}", expanded=False):
+                st.dataframe(df.head(5))
+                st.caption(f"{len(df):,} rows, {len(df.columns)} columns")
     
+    with tab2:
+        try:
+            from utils.hierarchy_config import (
+                render_hierarchy_quick_select,
+                render_hierarchy_mapping,
+                render_hierarchy_explanation
+            )
+            
+            # Check if user wants explanation
+            show_help = st.checkbox("Show hierarchy explanation", value=True, key="show_hierarchy_help")
+            
+            if show_help:
+                render_hierarchy_explanation()
+                st.markdown("---")
+            
+            # Quick preset selector
+            render_hierarchy_quick_select(wizard_state)
+            
+            st.markdown("---")
+            
+            # Detailed mapping (collapsed by default if preset was selected)
+            with st.expander("⚙️ Advanced: Customize Hierarchy Levels", expanded=False):
+                render_hierarchy_mapping(wizard_state, show_explanation=False)
+            
+        except ImportError as e:
+            st.warning("Hierarchy configuration module not available.")
+            log_exception(e, logger, {"action": "load_hierarchy_config"})
+    
+    # Navigation
+    st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Back"):
@@ -237,6 +290,43 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
     
     current_headers = df.columns.tolist()
     all_expected = expected.get("mandatory", []) + expected.get("optional", [])
+    
+    # ============================================
+    # Hierarchy-Based Column Detection
+    # ============================================
+    hierarchy_config = wizard_state.get_data("hierarchy_config")
+    hierarchy_mappings = {}
+    
+    if hierarchy_config:
+        try:
+            from utils.hierarchy_config import get_column_mappings_from_hierarchy
+            
+            hierarchy_mappings = get_column_mappings_from_hierarchy(
+                hierarchy_config,
+                current_headers
+            )
+            
+            if hierarchy_mappings:
+                st.markdown("### Hierarchy-Based Mappings")
+                st.success(f"✓ Found {len(hierarchy_mappings)} mappings from your hierarchy configuration")
+                
+                with st.expander("Hierarchy column mappings", expanded=False):
+                    for src, dst in hierarchy_mappings.items():
+                        st.write(f"- `{src}` → **{dst}**")
+                
+                # Apply hierarchy mappings button
+                if st.button("🏛️ Apply Hierarchy Mappings", key="apply_hierarchy"):
+                    existing = wizard_state.get_data("header_mapping", {})
+                    combined = {**existing, **hierarchy_mappings}
+                    wizard_state.set_data("header_mapping", combined)
+                    wizard_state.set_data("hierarchy_mappings_applied", True)
+                    st.success(f"Applied {len(hierarchy_mappings)} hierarchy mappings!")
+                    st.rerun()
+                
+                st.markdown("---")
+                
+        except Exception as e:
+            log_exception(e, logger, {"action": "hierarchy_column_mapping"})
     
     # ============================================
     # SIS Auto-Detection Section
