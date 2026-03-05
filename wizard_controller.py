@@ -593,12 +593,37 @@ def _render_legacy_validation(wizard_state: WizardState, df_mapped: pd.DataFrame
             spec = load_spec_by_type(dataset_type)
             results = handler.validate_against_spec(df_mapped, spec)
             
+            # Build detailed error breakdown
+            errors_list = results.get("errors", [])
+            errors_by_column = {}
+            errors_by_type = {}
+            sample_errors = []
+            
+            for err in errors_list:
+                if isinstance(err, dict):
+                    col = err.get("field", err.get("column", "Unknown"))
+                    err_type = err.get("type", err.get("error_type", "Validation Error"))
+                    
+                    errors_by_column[col] = errors_by_column.get(col, 0) + 1
+                    errors_by_type[err_type] = errors_by_type.get(err_type, 0) + 1
+                    
+                    if len(sample_errors) < 10:
+                        sample_errors.append({
+                            "row": err.get("row", err.get("row_index", "?")),
+                            "column": col,
+                            "message": err.get("message", str(err)),
+                            "value": err.get("value", err.get("current_value", ""))
+                        })
+            
             validation_results = {
                 "is_valid": results.get("is_valid", False),
-                "errors": results.get("errors", []),
+                "errors": errors_list,
                 "warnings": results.get("warnings", []),
-                "total_errors": len(results.get("errors", [])),
+                "total_errors": len(errors_list),
                 "total_warnings": len(results.get("warnings", [])),
+                "errors_by_column": errors_by_column,
+                "errors_by_type": errors_by_type,
+                "sample_errors": sample_errors
             }
             
         except ValueError:
@@ -1221,7 +1246,76 @@ def render_step_export(wizard_state: WizardState) -> None:
     
     # Show warning if there are validation errors
     if has_errors:
-        st.warning(f"⚠️ This data has {total_errors} validation error(s) that were not fixed.")
+        st.warning(f"⚠️ This data has {total_errors:,} validation error(s) that were not fixed.")
+        
+        # Show detailed error breakdown
+        with st.expander("📊 Error Breakdown (click to expand)", expanded=True):
+            error_details = validation_results.get("error_details", {})
+            errors_by_column = validation_results.get("errors_by_column", {})
+            errors_by_type = validation_results.get("errors_by_type", {})
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Errors by Type:**")
+                if errors_by_type:
+                    for error_type, count in sorted(errors_by_type.items(), key=lambda x: x[1], reverse=True)[:10]:
+                        st.write(f"- {error_type}: {count:,}")
+                else:
+                    # Try to extract from error_details
+                    type_counts = {}
+                    for col, errors in error_details.items():
+                        if isinstance(errors, list):
+                            for err in errors:
+                                err_type = err.get("type", "Unknown") if isinstance(err, dict) else "Validation Error"
+                                type_counts[err_type] = type_counts.get(err_type, 0) + 1
+                        elif isinstance(errors, int):
+                            type_counts[col] = errors
+                    
+                    if type_counts:
+                        for err_type, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+                            st.write(f"- {err_type}: {count:,}")
+                    else:
+                        st.write("No detailed type breakdown available")
+            
+            with col2:
+                st.markdown("**Errors by Column:**")
+                if errors_by_column:
+                    for col_name, count in sorted(errors_by_column.items(), key=lambda x: x[1], reverse=True)[:10]:
+                        st.write(f"- {col_name}: {count:,}")
+                elif error_details:
+                    col_counts = {}
+                    for col, errors in error_details.items():
+                        if isinstance(errors, list):
+                            col_counts[col] = len(errors)
+                        elif isinstance(errors, int):
+                            col_counts[col] = errors
+                    
+                    if col_counts:
+                        for col_name, count in sorted(col_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+                            st.write(f"- {col_name}: {count:,}")
+                    else:
+                        st.write("No column breakdown available")
+                else:
+                    st.write("No column breakdown available")
+            
+            # Show sample errors if available
+            sample_errors = validation_results.get("sample_errors", [])
+            if sample_errors:
+                st.markdown("**Sample Errors:**")
+                for i, err in enumerate(sample_errors[:5]):
+                    if isinstance(err, dict):
+                        st.write(f"{i+1}. Row {err.get('row', '?')}, Col '{err.get('column', '?')}': {err.get('message', err)}")
+                    else:
+                        st.write(f"{i+1}. {err}")
+        
+        # Suggestions based on error types
+        st.markdown("---")
+        st.markdown("**💡 Suggestions:**")
+        st.write("- Go back to **Auto-Fix** to apply more fixes")
+        st.write("- Check if mandatory fields are populated")
+        st.write("- Verify date formats are YYYY-MM-DD")
+        st.write("- Ensure enum values match allowed options")
         
         # Use session state to track if user acknowledged the warning
         warning_key = "export_warning_acknowledged"
