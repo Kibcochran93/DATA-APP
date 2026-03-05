@@ -1142,6 +1142,215 @@ def get_missing_columns(df: pd.DataFrame, spec: Dict[str, Any]) -> List[str]:
     return missing
 
 
+def detect_empty_mandatory_fields(
+    df: pd.DataFrame,
+    spec: Dict[str, Any],
+    empty_threshold: float = 0.95
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Detect mandatory fields that are empty or nearly empty.
+    
+    Args:
+        df: DataFrame to check
+        spec: Master spec dictionary
+        empty_threshold: Percentage of empty values to consider field as "empty" (default 95%)
+        
+    Returns:
+        Dict mapping field name to info dict with:
+        - empty_count: number of empty/null values
+        - empty_pct: percentage empty
+        - total_rows: total row count
+        - field_type: from spec (str, date, time, etc.)
+        - suggestion: suggested fix approach
+    """
+    mandatory_fields = spec.get('mandatory_fields', [])
+    fields_spec = spec.get('fields', {})
+    
+    empty_fields = {}
+    total_rows = len(df)
+    
+    if total_rows == 0:
+        return empty_fields
+    
+    for field in mandatory_fields:
+        # Find matching column (case-insensitive)
+        matching_col = None
+        for col in df.columns:
+            if col.upper() == field.upper():
+                matching_col = col
+                break
+        
+        if matching_col is None:
+            # Field doesn't exist - will be handled by missing column logic
+            continue
+        
+        # Count empty values
+        col_data = df[matching_col]
+        null_count = col_data.isna().sum()
+        empty_str_count = (col_data.astype(str).str.strip().isin(['', 'nan', 'None', 'NaN', 'null'])).sum()
+        empty_count = max(null_count, empty_str_count)
+        empty_pct = empty_count / total_rows
+        
+        if empty_pct >= empty_threshold:
+            field_info = fields_spec.get(field, {})
+            field_type = field_info.get('type', 'str')
+            
+            # Determine suggestion based on field type and name
+            if field.upper() == 'EVENT_ID':
+                suggestion = 'auto_generate'
+                suggestion_text = 'Auto-generate unique IDs from other fields'
+            elif field_type == 'time':
+                suggestion = 'default_value'
+                suggestion_text = 'Set default time value (e.g., 09:00)'
+            elif field_type == 'date':
+                suggestion = 'default_value'
+                suggestion_text = 'Set default date value'
+            else:
+                suggestion = 'manual_input'
+                suggestion_text = 'Enter a default value'
+            
+            empty_fields[field] = {
+                'column_name': matching_col,
+                'empty_count': int(empty_count),
+                'empty_pct': round(empty_pct * 100, 1),
+                'total_rows': total_rows,
+                'field_type': field_type,
+                'suggestion': suggestion,
+                'suggestion_text': suggestion_text,
+                'format': field_info.get('format', ''),
+                'values': field_info.get('values', [])  # For enum fields
+            }
+    
+    return empty_fields
+
+
+def generate_event_ids(
+    df: pd.DataFrame,
+    method: str = 'composite',
+    prefix: str = 'EVT',
+    composite_fields: Optional[List[str]] = None
+) -> pd.Series:
+    """
+    Generate unique EVENT_IDs for a timetable DataFrame.
+    
+    Args:
+        df: DataFrame to generate IDs for
+        method: Generation method:
+            - 'composite': Hash of composite fields (consistent)
+            - 'sequential': Sequential numbering with prefix
+            - 'uuid': UUID-based (unique but not reproducible)
+        prefix: Prefix for generated IDs
+        composite_fields: Fields to use for composite generation
+        
+    Returns:
+        Series of generated EVENT_IDs
+    """
+    import hashlib
+    
+    if method == 'sequential':
+        # Simple sequential: EVT000001, EVT000002, etc.
+        return pd.Series([f"{prefix}{i+1:06d}" for i in range(len(df))])
+    
+    elif method == 'uuid':
+        import uuid
+        return pd.Series([f"{prefix}{uuid.uuid4().hex[:12].upper()}" for _ in range(len(df))])
+    
+    elif method == 'composite':
+        # Generate consistent IDs from composite of other fields
+        if composite_fields is None:
+            # Default fields for timetable EVENT_ID
+            composite_fields = ['DAY', 'START_TIME', 'END_TIME', 'ROOM_ID', 'MODULE_ID', 'STUDENT_ID']
+        
+        # Find matching columns (case-insensitive)
+        col_map = {col.upper(): col for col in df.columns}
+        available_fields = [col_map.get(f.upper()) for f in composite_fields if f.upper() in col_map]
+        
+        if not available_fields:
+            # Fallback to sequential if no composite fields available
+            return pd.Series([f"{prefix}{i+1:06d}" for i in range(len(df))])
+        
+        def generate_hash(row):
+            # Create consistent string from available fields
+            values = []
+            for col in available_fields:
+                val = row.get(col, '')
+                if pd.isna(val):
+                    val = ''
+                values.append(str(val).strip())
+            
+            composite = '|'.join(values)
+            # Generate short hash
+            hash_val = hashlib.md5(composite.encode()).hexdigest()[:10].upper()
+            return f"{prefix}{hash_val}"
+        
+        return df.apply(generate_hash, axis=1)
+    
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+
+def fill_empty_mandatory_field(
+    df: pd.DataFrame,
+    field_name: str,
+    value: Any = None,
+    method: str = 'default',
+    **kwargs
+) -> pd.DataFrame:
+    """
+    Fill an empty mandatory field with a value.
+    
+    Args:
+        df: DataFrame to modify
+        field_name: Name of field to fill
+        value: Value to fill with (for default method)
+        method: Fill method:
+            - 'default': Fill all empty with single value
+            - 'auto_generate': Generate unique values (for ID fields)
+        **kwargs: Additional arguments for specific methods
+        
+    Returns:
+        Modified DataFrame
+    """
+    df = df.copy()
+    
+    # Find matching column
+    matching_col = None
+    for col in df.columns:
+        if col.upper() == field_name.upper():
+            matching_col = col
+            break
+    
+    if matching_col is None:
+        # Column doesn't exist - create it
+        matching_col = field_name
+        df[matching_col] = None
+    
+    if method == 'default':
+        # Fill empty values with default
+        mask = df[matching_col].isna() | (df[matching_col].astype(str).str.strip() == '')
+        df.loc[mask, matching_col] = value
+        
+    elif method == 'auto_generate':
+        # Generate unique values (primarily for EVENT_ID)
+        if field_name.upper() == 'EVENT_ID':
+            generated = generate_event_ids(
+                df,
+                method=kwargs.get('generation_method', 'composite'),
+                prefix=kwargs.get('prefix', 'EVT'),
+                composite_fields=kwargs.get('composite_fields')
+            )
+            mask = df[matching_col].isna() | (df[matching_col].astype(str).str.strip() == '')
+            df.loc[mask, matching_col] = generated[mask]
+        else:
+            # For other fields, use sequential generation
+            mask = df[matching_col].isna() | (df[matching_col].astype(str).str.strip() == '')
+            prefix = kwargs.get('prefix', field_name[:3].upper())
+            count = mask.sum()
+            df.loc[mask, matching_col] = [f"{prefix}{i+1:06d}" for i in range(count)]
+    
+    return df
+
+
 def detect_column_variations(
     df: pd.DataFrame,
     spec: Dict[str, Any]

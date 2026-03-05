@@ -894,6 +894,132 @@ def render_step_autofix(wizard_state: WizardState) -> None:
         st.markdown("---")
         
         # ============================================
+        # Section 1b: Empty Mandatory Fields
+        # ============================================
+        empty_mandatory_values = {}  # Store user inputs
+        
+        try:
+            from utils.seats_data_handler import detect_empty_mandatory_fields
+            
+            empty_mandatory = detect_empty_mandatory_fields(df, spec) if spec else {}
+            
+            if empty_mandatory:
+                st.markdown("#### ⚠️ Empty Mandatory Fields")
+                st.error(f"**{len(empty_mandatory)} mandatory field(s) are empty** and need values to pass validation.")
+                
+                for field_name, field_info in empty_mandatory.items():
+                    with st.expander(f"📋 {field_name} ({field_info['empty_pct']}% empty)", expanded=True):
+                        st.write(f"**{field_info['empty_count']:,}** of {field_info['total_rows']:,} rows are empty")
+                        st.write(f"Field type: `{field_info['field_type']}`")
+                        
+                        if field_info['format']:
+                            st.write(f"Required format: `{field_info['format']}`")
+                        
+                        # Different input methods based on suggestion
+                        if field_name.upper() == 'EVENT_ID':
+                            st.info("💡 EVENT_ID can be auto-generated from other fields for consistency")
+                            
+                            gen_method = st.radio(
+                                "Generation method:",
+                                options=['composite', 'sequential'],
+                                format_func=lambda x: {
+                                    'composite': '🔗 Composite (hash of DAY+TIME+ROOM+MODULE+STUDENT - consistent & reproducible)',
+                                    'sequential': '🔢 Sequential (EVT000001, EVT000002, ...)'
+                                }.get(x, x),
+                                key=f"gen_method_{field_name}"
+                            )
+                            
+                            prefix = st.text_input(
+                                "ID Prefix:",
+                                value="EVT",
+                                max_chars=10,
+                                key=f"prefix_{field_name}"
+                            )
+                            
+                            empty_mandatory_values[field_name] = {
+                                'method': 'auto_generate',
+                                'generation_method': gen_method,
+                                'prefix': prefix
+                            }
+                            
+                        elif field_info['field_type'] == 'time':
+                            st.info("💡 Enter a default time for all empty rows")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                default_time = st.text_input(
+                                    f"Default {field_name}:",
+                                    value="09:00" if 'START' in field_name.upper() else "10:00",
+                                    placeholder="HH:MM (24-hour format)",
+                                    key=f"default_{field_name}"
+                                )
+                            with col2:
+                                st.caption("Format: HH:MM (24-hour)")
+                                st.caption("Examples: 09:00, 14:30, 17:45")
+                            
+                            if default_time:
+                                empty_mandatory_values[field_name] = {
+                                    'method': 'default',
+                                    'value': default_time
+                                }
+                                
+                        elif field_info['field_type'] == 'date':
+                            st.info("💡 Enter a default date for all empty rows")
+                            
+                            default_date = st.text_input(
+                                f"Default {field_name}:",
+                                value="",
+                                placeholder="YYYY-MM-DD",
+                                key=f"default_{field_name}"
+                            )
+                            
+                            if default_date:
+                                empty_mandatory_values[field_name] = {
+                                    'method': 'default',
+                                    'value': default_date
+                                }
+                                
+                        elif field_info['values']:  # Enum field
+                            st.info("💡 Select a default value from allowed options")
+                            
+                            allowed_values = [v for v in field_info['values'] if v]  # Remove empty
+                            default_val = st.selectbox(
+                                f"Default {field_name}:",
+                                options=[''] + allowed_values,
+                                key=f"default_{field_name}"
+                            )
+                            
+                            if default_val:
+                                empty_mandatory_values[field_name] = {
+                                    'method': 'default',
+                                    'value': default_val
+                                }
+                                
+                        else:  # Generic text field
+                            st.info("💡 Enter a default value for all empty rows")
+                            
+                            default_val = st.text_input(
+                                f"Default {field_name}:",
+                                value="",
+                                key=f"default_{field_name}"
+                            )
+                            
+                            if default_val:
+                                empty_mandatory_values[field_name] = {
+                                    'method': 'default',
+                                    'value': default_val
+                                }
+                
+                # Store in wizard state for apply step
+                wizard_state.set_data("empty_mandatory_values", empty_mandatory_values)
+                
+        except Exception as e:
+            log_exception(e, logger, {"action": "detect_empty_mandatory"})
+            empty_mandatory = {}
+        
+        st.markdown("---")
+        
+        # ============================================
         # Section 2: Data Quality Fixes
         # ============================================
         if has_quality_issues and quality_report:
@@ -1058,6 +1184,40 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                             fixes_applied.append(f"Inserted {len(report['inserted'])} missing column(s)")
                         if report['reordered']:
                             fixes_applied.append("Reordered columns to match spec")
+                    
+                    # Fix 1b: Fill empty mandatory fields
+                    empty_mandatory_values = wizard_state.get_data("empty_mandatory_values", {})
+                    if empty_mandatory_values:
+                        try:
+                            from utils.seats_data_handler import fill_empty_mandatory_field
+                            
+                            for field_name, fill_config in empty_mandatory_values.items():
+                                method = fill_config.get('method', 'default')
+                                
+                                if method == 'auto_generate':
+                                    df_fixed = fill_empty_mandatory_field(
+                                        df_fixed,
+                                        field_name,
+                                        method='auto_generate',
+                                        generation_method=fill_config.get('generation_method', 'composite'),
+                                        prefix=fill_config.get('prefix', 'EVT')
+                                    )
+                                    fixes_applied.append(f"Generated {field_name} values")
+                                    
+                                elif method == 'default':
+                                    value = fill_config.get('value')
+                                    if value:
+                                        df_fixed = fill_empty_mandatory_field(
+                                            df_fixed,
+                                            field_name,
+                                            value=value,
+                                            method='default'
+                                        )
+                                        fixes_applied.append(f"Set {field_name} = '{value}'")
+                                        
+                        except Exception as e:
+                            log_exception(e, logger, {"action": "fill_empty_mandatory"})
+                            st.warning(f"Could not fill empty mandatory fields: {str(e)}")
                     
                     # Fix 2: Data quality fixes
                     if quality_report and (fix_id_fields or fix_date_time or fix_encoding or fix_multi_value or fix_enums or fix_structural):
