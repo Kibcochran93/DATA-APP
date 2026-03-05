@@ -867,6 +867,18 @@ class DataQualityFixer:
             'structural': 0
         }
         
+        # Pre-convert ID field columns to string to avoid dtype warnings
+        if fix_ids:
+            id_columns = [
+                'STUDENT_ID', 'EVENT_ID', 'COURSE_ID', 'MODULE_ID', 'STAFF_ID',
+                'ROOM_ID', 'SCHOOL_ID', 'SITE_ID', 'FACULTY_ID', 'BADGE_NUMBER',
+                'TUTOR_ID', 'CAS_NUMBER', 'VISA_NUMBER'
+            ]
+            for col in df_fixed.columns:
+                if col.upper() in id_columns or col.upper().endswith('_ID'):
+                    if col in df_fixed.columns and pd.api.types.is_numeric_dtype(df_fixed[col].dtype):
+                        df_fixed[col] = df_fixed[col].astype(object)
+        
         # Track rows to remove (structural issues)
         rows_to_remove = set()
         
@@ -904,7 +916,13 @@ class DataQualityFixer:
             
             # Apply fix
             if idx is not None:
-                df_fixed.loc[idx, col] = issue.suggested_fix
+                # Ensure column can accept the fix value (convert to object if needed)
+                if issue.suggested_fix is not None:
+                    current_dtype = df_fixed[col].dtype
+                    # If column is numeric and fix is string, convert column to object
+                    if pd.api.types.is_numeric_dtype(current_dtype) and isinstance(issue.suggested_fix, str):
+                        df_fixed[col] = df_fixed[col].astype(object)
+                    df_fixed.loc[idx, col] = issue.suggested_fix
             else:
                 # Column-wide fix (like mixed date formats)
                 # This would need special handling per issue type
