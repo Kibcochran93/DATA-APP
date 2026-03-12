@@ -927,30 +927,35 @@ def render_step_autofix(wizard_state: WizardState) -> None:
                         for spec_field, dup_cols in duplicates.items():
                             st.write(f"- **{spec_field}**: {', '.join([f'`{c}`' for c in dup_cols])}")
             
-            # 1c: Missing columns
+            # 1c: Missing columns (ALL spec columns are required)
             fix_missing_cols = False
             if missing_cols:
+                st.error(
+                    f"**{len(missing_cols)} required column(s) missing.** "
+                    f"All columns in the spec must be present in the file."
+                )
                 if missing_mandatory:
-                    st.warning(f"**{len(missing_mandatory)} mandatory column(s) missing:** {', '.join(missing_mandatory)}")
+                    st.write(f"Mandatory value fields: {', '.join(missing_mandatory)}")
                 if missing_optional:
-                    st.caption(f"{len(missing_optional)} optional column(s) missing")
+                    st.write(f"Blank-allowed fields: {', '.join(missing_optional[:10])}"
+                             f"{'...' if len(missing_optional) > 10 else ''}")
                 
                 fix_missing_cols = st.checkbox(
                     f"Insert {len(missing_cols)} missing column(s) in correct spec order",
-                    value=len(missing_mandatory) > 0,
+                    value=True,
                     help="Adds empty columns for all missing fields in the position defined by the SEATS spec"
                 )
                 if fix_missing_cols:
                     with st.expander("Columns to be inserted", expanded=False):
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.markdown("**Mandatory:**")
+                            st.markdown("**Mandatory (values required):**")
                             for col in missing_mandatory:
                                 st.write(f"- {col}")
                             if not missing_mandatory:
                                 st.write("None")
                         with col2:
-                            st.markdown("**Optional:**")
+                            st.markdown("**Non-mandatory (values can be blank):**")
                             for col in missing_optional[:10]:
                                 st.write(f"- {col}")
                             if len(missing_optional) > 10:

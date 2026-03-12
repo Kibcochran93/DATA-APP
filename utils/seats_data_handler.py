@@ -1590,6 +1590,9 @@ def detect_column_variations(
     
     Checks for:
     - Suffix patterns like _x, _y, _1, _2 (from pandas merge)
+    - Pandas .1, .2 suffix (from duplicate CSV headers)
+    - Separator differences (underscore vs hyphen, e.g., STUDENT_16_18 vs STUDENT_16-18)
+    - Spelling variants (e.g., PROGRAM_NAME vs PROGRAMME_NAME)
     - Common naming variations
     - Case differences
     
@@ -1628,7 +1631,16 @@ def detect_column_variations(
         if col_upper in spec_fields_upper:
             continue
         
-        # Check for suffix patterns
+        # Check for pandas .N suffix from duplicate CSV headers (e.g., MODULE_STATUS.1)
+        if '.' in col_upper:
+            parts = col_upper.rsplit('.', 1)
+            if parts[1].isdigit():
+                base_name = parts[0]
+                if base_name in spec_fields_upper:
+                    variations[col] = (spec_fields_upper[base_name], f"Duplicate column (pandas '.{parts[1]}' suffix)")
+                    continue
+        
+        # Check for merge suffix patterns
         for suffix in suffix_patterns:
             if col_upper.endswith(suffix.upper()):
                 base_name = col_upper[:-len(suffix)]
@@ -1639,7 +1651,48 @@ def detect_column_variations(
         if col in variations:
             continue
         
-        # Check naming variations
+        # Check separator differences (underscore vs hyphen)
+        # e.g., STUDENT_16_18 -> STUDENT_16-18
+        col_normalized = col_upper.replace('_', '').replace('-', '').replace(' ', '')
+        for spec_upper, spec_original in spec_fields_upper.items():
+            spec_normalized = spec_upper.replace('_', '').replace('-', '').replace(' ', '')
+            if col_normalized == spec_normalized and col_upper != spec_upper:
+                variations[col] = (spec_original, "Separator mismatch (underscore/hyphen)")
+                break
+        
+        if col in variations:
+            continue
+        
+        # Check spelling variants using subsequence similarity
+        # e.g., PROGRAM_NAME -> PROGRAMME_NAME
+        if len(col_normalized) >= 5:
+            best_match = None
+            best_score = 0
+            for spec_upper, spec_original in spec_fields_upper.items():
+                spec_normalized = spec_upper.replace('_', '').replace('-', '').replace(' ', '')
+                if len(spec_normalized) < 5:
+                    continue
+                # Subsequence matching
+                matches = 0
+                j = 0
+                for c in col_normalized:
+                    while j < len(spec_normalized):
+                        if c == spec_normalized[j]:
+                            matches += 1
+                            j += 1
+                            break
+                        j += 1
+                max_len = max(len(col_normalized), len(spec_normalized))
+                ratio = matches / max_len if max_len > 0 else 0
+                if ratio > 0.80 and ratio > best_score:
+                    best_score = ratio
+                    best_match = spec_original
+            
+            if best_match:
+                variations[col] = (best_match, "Likely spelling variant")
+                continue
+        
+        # Check hardcoded naming variations
         for spec_col, var_list in naming_variations.items():
             if spec_col.upper() in spec_fields_upper:
                 if col_upper in [v.upper() for v in var_list]:
