@@ -69,16 +69,36 @@ class TestIDFieldIssues:
         assert any("decimal" in i.message.lower() for i in id_issues)
     
     def test_detect_special_chars_in_id(self):
-        """Test detection of special characters in ID fields."""
+        """Test that special character detection is spec-driven.
+        
+        Without spec constraints, no format issues should be flagged.
+        With a spec that defines a pattern, violations should be caught.
+        """
         df = pd.DataFrame({
             "STUDENT_ID": ["123", "456@#", "789"]
         })
+        
+        # Without spec: no format issues (only Excel corruption checks apply)
         analyzer = DataQualityAnalyzer()
         report = analyzer.analyze(df)
-        
         id_issues = report.get_by_type(IssueType.ID_FIELD)
-        assert len(id_issues) >= 1
-        assert any("special character" in i.message.lower() for i in id_issues)
+        assert len(id_issues) == 0, "No format issues should be flagged without spec constraints"
+        
+        # With spec that defines max_length: values exceeding it should be caught
+        spec_with_constraints = {
+            "fields": {
+                "STUDENT_ID": {
+                    "type": "str",
+                    "max_length": 3,
+                    "preserve_leading_zeros": True
+                }
+            }
+        }
+        analyzer2 = DataQualityAnalyzer(spec_with_constraints)
+        report2 = analyzer2.analyze(df)
+        id_issues2 = report2.get_by_type(IssueType.ID_FIELD)
+        assert len(id_issues2) >= 1, "Should flag value exceeding max_length"
+        assert any("max length" in i.message.lower() for i in id_issues2)
     
     def test_no_issues_for_valid_ids(self):
         """Test no issues reported for valid IDs."""

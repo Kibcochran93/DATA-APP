@@ -338,7 +338,19 @@ class DataQualityAnalyzer:
     # =========================================================================
     
     def _check_id_field_issues(self, df: pd.DataFrame, col: str):
-        """Check ID field for common issues."""
+        """Check ID field for issues based on Master Spec constraints.
+        
+        Generic Excel-corruption checks (scientific notation, decimal IDs) always run.
+        Format-specific checks (pattern, max_length, special chars) only run when
+        the spec defines constraints for the field.
+        """
+        col_upper = col.upper()
+        field_spec = self.spec.get('fields', {}).get(col_upper, {}) if self.spec else {}
+        
+        # Extract spec constraints for this field
+        spec_pattern = field_spec.get('pattern')
+        spec_max_length = field_spec.get('max_length')
+        has_spec_constraints = bool(spec_pattern or spec_max_length)
         
         for idx, value in df[col].items():
             if pd.isna(value) or str(value).strip() == '':
@@ -346,8 +358,15 @@ class DataQualityAnalyzer:
             
             str_val = str(value).strip()
             
+            # --- Generic Excel-corruption checks (always run) ---
+            
             # Check for scientific notation (e.g., 1.23E+10)
             if re.match(r'^[\d.]+[eE][+-]?\d+$', str_val):
+                try:
+                    num = float(str_val)
+                    fixed = str(int(num)) if num == int(num) else str(num)
+                except (ValueError, OverflowError):
+                    fixed = str_val
                 self.report.add_issue(DataQualityIssue(
                     issue_type=IssueType.ID_FIELD,
                     severity=IssueSeverity.ERROR,
@@ -355,12 +374,13 @@ class DataQualityAnalyzer:
                     row_index=idx,
                     message="ID in scientific notation (data corrupted by Excel)",
                     current_value=str_val,
-                    suggested_fix="Convert back to full number and preserve as text",
+                    suggested_fix=fixed,
                     can_auto_fix=True
                 ))
+                continue
             
             # Check for float values that should be integers
-            elif re.match(r'^\d+\.0+$', str_val):
+            if re.match(r'^\d+\.0+$', str_val):
                 self.report.add_issue(DataQualityIssue(
                     issue_type=IssueType.ID_FIELD,
                     severity=IssueSeverity.WARNING,
@@ -371,32 +391,39 @@ class DataQualityAnalyzer:
                     suggested_fix=str_val.split('.')[0],
                     can_auto_fix=True
                 ))
+                continue
             
-            # Check for special characters in ID
-            elif re.search(r'[^\w\-/|]', str_val) and not re.search(r'^[\d.]+[eE]', str_val):
-                # Allow alphanumeric, dash, forward slash, pipe
-                bad_chars = re.findall(r'[^\w\-/|]', str_val)
+            # --- Spec-driven checks (only when spec defines constraints) ---
+            
+            if not has_spec_constraints:
+                # No format rules in spec for this field; skip format checks
+                continue
+            
+            # Check pattern if spec defines one
+            if spec_pattern:
+                if not re.match(spec_pattern, str_val):
+                    self.report.add_issue(DataQualityIssue(
+                        issue_type=IssueType.ID_FIELD,
+                        severity=IssueSeverity.WARNING,
+                        column=col,
+                        row_index=idx,
+                        message=f"Value does not match required format: {spec_pattern}",
+                        current_value=str_val,
+                        suggested_fix=None,
+                        can_auto_fix=False
+                    ))
+            
+            # Check max_length if spec defines one
+            if spec_max_length and len(str_val) > spec_max_length:
+                truncated = str_val[:spec_max_length]
                 self.report.add_issue(DataQualityIssue(
                     issue_type=IssueType.ID_FIELD,
                     severity=IssueSeverity.WARNING,
                     column=col,
                     row_index=idx,
-                    message=f"ID contains special characters: {set(bad_chars)}",
+                    message=f"Value exceeds max length of {spec_max_length} (length: {len(str_val)})",
                     current_value=str_val,
-                    suggested_fix="Remove special characters",
-                    can_auto_fix=True
-                ))
-            
-            # Check for leading/trailing spaces
-            elif value != str_val:
-                self.report.add_issue(DataQualityIssue(
-                    issue_type=IssueType.ID_FIELD,
-                    severity=IssueSeverity.WARNING,
-                    column=col,
-                    row_index=idx,
-                    message="ID has leading or trailing whitespace",
-                    current_value=repr(value),
-                    suggested_fix=str_val,
+                    suggested_fix=truncated,
                     can_auto_fix=True
                 ))
     

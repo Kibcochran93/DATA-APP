@@ -110,9 +110,13 @@ def load_master_spec(dataset_type: str, spec_path: Optional[str] = None) -> Dict
     # Map common names to actual spec file names
     spec_file_map = {
         "timetable": "student_timetable_spec.json",
+        "timetabledata": "student_timetable_spec.json",
         "studenttimetable": "student_timetable_spec.json",
+        "studenttimetabledata": "student_timetable_spec.json",
         "student": "student_data_spec.json",
+        "studentdata": "student_data_spec.json",
         "staff": "staff_data_spec.json",
+        "staffdata": "staff_data_spec.json",
     }
     
     spec_filename = spec_file_map.get(dataset_lower, f"{dataset_lower}_spec.json")
@@ -278,64 +282,209 @@ class SEATSValidator:
         return self.result
     
     def _validate_schema(self, df: pd.DataFrame):
-        """Validate column schema against master spec."""
-        # Check for duplicate column names (from pandas merge)
-        duplicate_bases = {}
-        for col in df.columns:
-            col_upper = col.upper()
-            if col_upper.endswith('_X') or col_upper.endswith('_Y'):
-                base_name = col_upper[:-2]
-            else:
-                base_name = col_upper
-            
-            if base_name not in duplicate_bases:
-                duplicate_bases[base_name] = []
-            duplicate_bases[base_name].append(col)
+        """Validate column schema against master spec.
         
-        for base, variants in duplicate_bases.items():
+        Per the SEATS Data Interface Specification:
+        - ALL columns in the spec are REQUIRED in the file (not just mandatory ones)
+        - ALL columns must be in the correct order (per spec position)
+        - "Mandatory" only means the cell values cannot be blank
+        - "Non-mandatory" columns must still be present but values can be blank
+        
+        Checks performed:
+        1. Duplicate columns (including pandas .1 suffix from CSV duplicates)
+        2. Missing columns (ALL spec columns required, not just mandatory)
+        3. Column name near-mismatches (likely typos)
+        4. Unexpected columns not in spec
+        5. Columns with leading/trailing whitespace
+        6. Column order vs spec-defined positions (ERROR severity)
+        """
+        fields_spec = self.spec.get('fields', {}) if self.spec else {}
+        all_spec_columns = set(c.upper() for c in self.mandatory_columns + self.optional_columns)
+        
+        # Build normalized lookup of columns present in the file
+        # Handle pandas suffixes: .1, .2 (from duplicate CSV headers) and _x, _y (from merges)
+        normalized_cols = {}  # upper_name -> [actual_col_names]
+        for c in df.columns:
+            col_upper = c.strip().upper()
+            base = col_upper
+            if '.' in base:
+                parts = base.rsplit('.', 1)
+                if parts[1].isdigit():
+                    base = parts[0]
+            if base.endswith('_X') or base.endswith('_Y'):
+                base = base[:-2]
+            
+            if base not in normalized_cols:
+                normalized_cols[base] = []
+            normalized_cols[base].append(c)
+        
+        # --- 1. Duplicate columns ---
+        for base, variants in normalized_cols.items():
             if len(variants) > 1:
                 self.result.schema_issues.append(
-                    f"Duplicate column detected: {', '.join(variants)} - "
-                    f"appears to be result of a pandas merge. Should be single '{base}' column."
+                    f"Duplicate column: '{base}' appears {len(variants)} times as "
+                    f"{', '.join(repr(v) for v in variants)}. "
+                    f"Should be a single '{base}' column."
                 )
         
-        # Check for missing mandatory columns (per Master Spec)
-        if self.mandatory_columns:
-            normalized_cols = set()
-            for c in df.columns:
-                col_upper = c.strip().upper()
-                if col_upper.endswith('_X') or col_upper.endswith('_Y'):
-                    normalized_cols.add(col_upper[:-2])
-                else:
-                    normalized_cols.add(col_upper)
+        # --- 2. Missing columns (ALL spec columns are required) ---
+        if all_spec_columns:
+            missing_mandatory = []
+            missing_nonmandatory = []
+            mandatory_set = set(c.upper() for c in self.mandatory_columns)
             
-            for mandatory in self.mandatory_columns:
-                if mandatory.upper() not in normalized_cols:
+            for spec_col in self.mandatory_columns + self.optional_columns:
+                if spec_col.upper() not in normalized_cols:
+                    if spec_col.upper() in mandatory_set:
+                        missing_mandatory.append(spec_col)
+                    else:
+                        missing_nonmandatory.append(spec_col)
+            
+            # Missing mandatory-value columns (values required AND column required)
+            for col in missing_mandatory:
+                self.result.schema_issues.append(
+                    f"Missing required column: {col} "
+                    f"(mandatory field - values cannot be blank)"
+                )
+            
+            # Missing non-mandatory-value columns (column still required, values can be blank)
+            for col in missing_nonmandatory:
+                self.result.schema_issues.append(
+                    f"Missing required column: {col} "
+                    f"(values can be blank but column must be present)"
+                )
+        
+        # --- 3. Column name near-mismatches and unexpected columns ---
+        if all_spec_columns:
+            for col in df.columns:
+                col_upper = col.strip().upper()
+                base = col_upper
+                if '.' in base:
+                    parts = base.rsplit('.', 1)
+                    if parts[1].isdigit():
+                        base = parts[0]
+                if base.endswith('_X') or base.endswith('_Y'):
+                    base = base[:-2]
+                
+                if base in all_spec_columns:
+                    continue
+                
+                # Check for near-matches (likely typos)
+                near_match = self._find_near_match(base, all_spec_columns)
+                if near_match:
                     self.result.schema_issues.append(
-                        f"Missing mandatory column: {mandatory} (per SEATS Master Spec)"
+                        f"Column name mismatch: '{col}' is not in the spec. "
+                        f"Did you mean '{near_match}'?"
+                    )
+                elif base:
+                    self.result.warnings.append(
+                        f"Unexpected column: '{col}' is not in SEATS Master Spec "
+                        f"for {self.dataset_type}"
                     )
         
-        # Check for columns with trailing whitespace
+        # --- 4. Columns with whitespace ---
         for col in df.columns:
             if col != col.strip():
                 self.result.schema_issues.append(
-                    f"Column '{col}' has leading/trailing whitespace. Should be '{col.strip()}'"
+                    f"Column '{col}' has leading/trailing whitespace. "
+                    f"Should be '{col.strip()}'"
                 )
         
-        # Check for unexpected columns (not in spec)
-        if self.mandatory_columns or self.optional_columns:
-            all_expected = set(c.upper() for c in self.mandatory_columns + self.optional_columns)
-            for col in df.columns:
-                col_upper = col.strip().upper()
-                if col_upper.endswith('_X') or col_upper.endswith('_Y'):
-                    normalized = col_upper[:-2]
-                else:
-                    normalized = col_upper
+        # --- 5. Column order (ERROR - blocks export) ---
+        if fields_spec:
+            self._check_column_order(df, fields_spec)
+    
+    def _find_near_match(self, col_name: str, expected: set) -> Optional[str]:
+        """Find a near-match for a column name in the expected set.
+        
+        Catches common issues like:
+        - Underscore vs hyphen (STUDENT_16_18 vs STUDENT_16-18)
+        - Spelling variants (PROGRAM_NAME vs PROGRAMME_NAME)
+        """
+        col_normalized = col_name.replace('_', '').replace('-', '').replace(' ', '')
+        
+        best_match = None
+        best_score = 0
+        
+        for exp in expected:
+            exp_normalized = exp.replace('_', '').replace('-', '').replace(' ', '')
+            
+            # Exact match after stripping separators
+            if col_normalized == exp_normalized:
+                return exp
+            
+            # Use ratio comparison for close spelling variants
+            # Require at least 80% similarity and minimum length of 5
+            if len(col_normalized) >= 5 and len(exp_normalized) >= 5:
+                # Simple ratio: count matching chars in order
+                matches = 0
+                j = 0
+                for c in col_normalized:
+                    while j < len(exp_normalized):
+                        if c == exp_normalized[j]:
+                            matches += 1
+                            j += 1
+                            break
+                        j += 1
                 
-                if normalized not in all_expected and normalized:
-                    self.result.warnings.append(
-                        f"Unexpected column: {col} - not in SEATS Master Spec for {self.dataset_type}"
-                    )
+                max_len = max(len(col_normalized), len(exp_normalized))
+                ratio = matches / max_len if max_len > 0 else 0
+                
+                if ratio > 0.80 and ratio > best_score:
+                    best_score = ratio
+                    best_match = exp
+        
+        return best_match
+    
+    def _check_column_order(self, df: pd.DataFrame, fields_spec: Dict):
+        """Check if columns appear in the order defined by spec positions.
+        
+        Per SEATS Data Interface Spec, column order is required.
+        Out-of-order columns are reported as schema issues (errors).
+        """
+        # Build expected order from spec positions
+        ordered_fields = sorted(
+            [(name, info.get('position', 999)) for name, info in fields_spec.items()],
+            key=lambda x: x[1]
+        )
+        expected_order = [name.upper() for name, _ in ordered_fields]
+        
+        # Get actual column order (normalized, skip pandas suffixes)
+        actual_order = []
+        seen = set()
+        for col in df.columns:
+            col_upper = col.strip().upper()
+            base = col_upper
+            if '.' in base:
+                parts = base.rsplit('.', 1)
+                if parts[1].isdigit():
+                    base = parts[0]
+            if base.endswith('_X') or base.endswith('_Y'):
+                base = base[:-2]
+            if base not in seen and base in set(expected_order):
+                actual_order.append(base)
+                seen.add(base)
+        
+        if not actual_order:
+            return
+        
+        # Build the expected sub-sequence (only fields present in the file)
+        expected_sub = [f for f in expected_order if f in set(actual_order)]
+        
+        if actual_order != expected_sub:
+            out_of_order = []
+            for i, actual in enumerate(actual_order):
+                if i < len(expected_sub) and actual != expected_sub[i]:
+                    expected_pos = expected_order.index(actual) + 1 if actual in expected_order else '?'
+                    actual_pos = i + 1
+                    out_of_order.append(f"{actual} (file pos {actual_pos}, spec pos {expected_pos})")
+            
+            if out_of_order:
+                self.result.schema_issues.append(
+                    f"Columns out of required order. {len(out_of_order)} column(s) misplaced: "
+                    f"{', '.join(out_of_order[:10])}"
+                    f"{f' and {len(out_of_order) - 10} more' if len(out_of_order) > 10 else ''}"
+                )
     
     def _validate_rows(self, df: pd.DataFrame):
         """Validate each row for data quality issues per Master Spec."""

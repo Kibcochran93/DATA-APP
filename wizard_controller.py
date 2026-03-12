@@ -581,12 +581,16 @@ def render_step_validation(wizard_state: WizardState) -> None:
             wizard_state.set_data("dataframe_mapped", df_mapped)
             
             # Convert to legacy format for compatibility with other steps
+            # Schema issues (missing columns, wrong order) are errors that block export
+            has_schema_errors = len(validation_result.schema_issues) > 0
+            has_row_errors = validation_result.to_summary()["total_errors"] > 0
             validation_results = {
-                "is_valid": validation_result.to_summary()["total_errors"] == 0,
+                "is_valid": not has_schema_errors and not has_row_errors,
                 "errors": [e.to_dict() for e in validation_result.errors],
                 "warnings": validation_result.warnings,
                 "schema_issues": validation_result.schema_issues,
                 "total_errors": validation_result.to_summary()["total_errors"],
+                "total_schema_errors": len(validation_result.schema_issues),
                 "total_warnings": len(validation_result.warnings),
                 "rows_affected": validation_result.to_summary()["rows_affected"],
             }

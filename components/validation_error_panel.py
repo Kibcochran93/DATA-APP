@@ -168,19 +168,31 @@ class ValidationErrorPanel:
                     st.write(f"- **{col}**: {count} errors")
     
     def _render_schema_issues(self, schema_issues: List[str]):
-        """Render schema-level issues."""
+        """Render schema-level issues.
+        
+        Per SEATS Data Interface Spec:
+        - All missing columns are errors (all spec columns are required)
+        - Column order issues are errors (blocks export)
+        - Duplicates and name mismatches are errors
+        """
         st.markdown("### Schema Issues")
         
         for issue in schema_issues:
-            # Determine icon based on issue type
-            if "Missing mandatory" in issue:
+            if "Missing required column" in issue:
+                st.error(f"**Missing Column:** {issue}")
+            elif "Missing mandatory" in issue:
+                # Legacy format compatibility
                 st.error(f"**Missing Column:** {issue}")
             elif "Duplicate" in issue:
-                st.warning(f"**Duplicate Column:** {issue}")
+                st.error(f"**Duplicate Column:** {issue}")
+            elif "out of required order" in issue.lower():
+                st.error(f"**Column Order:** {issue}")
+            elif "mismatch" in issue.lower():
+                st.error(f"**Column Name:** {issue}")
             elif "whitespace" in issue.lower():
                 st.warning(f"**Column Naming:** {issue}")
             else:
-                st.warning(issue)
+                st.error(issue)
     
     def _render_error_details(self, validation_result: Any):
         """Render detailed error list with row navigation."""
