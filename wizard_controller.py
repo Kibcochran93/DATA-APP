@@ -1654,82 +1654,82 @@ def render_step_export(wizard_state: WizardState) -> None:
         st.error("No data to export.")
         return
     
-    # Check for validation errors
-    total_errors = validation_results.get("total_errors", 0)
-    has_errors = total_errors > 0
+    # Count ALL errors (schema + row-level)
+    schema_issues = validation_results.get("schema_issues", [])
+    row_errors = validation_results.get("errors", [])
+    warnings = validation_results.get("warnings", [])
+    total_schema = len(schema_issues)
+    total_row = len(row_errors)
+    total_all = total_schema + total_row
+    has_errors = total_all > 0
     
     # Show warning if there are validation errors
     if has_errors:
-        st.warning(f"⚠️ This data has {total_errors:,} validation error(s) that were not fixed.")
+        st.warning(
+            f"This data has {total_all:,} validation error(s) that were not fixed "
+            f"({total_schema} schema, {total_row} row-level)."
+        )
         
         # Show detailed error breakdown
-        with st.expander("📊 Error Breakdown (click to expand)", expanded=True):
-            error_details = validation_results.get("error_details", {})
-            errors_by_column = validation_results.get("errors_by_column", {})
-            errors_by_type = validation_results.get("errors_by_type", {})
+        with st.expander("Error Breakdown (click to expand)", expanded=True):
             
-            col1, col2 = st.columns(2)
+            # Schema issues
+            if schema_issues:
+                st.markdown("**Schema Errors:**")
+                for issue in schema_issues:
+                    st.error(issue)
             
-            with col1:
-                st.markdown("**Errors by Type:**")
-                if errors_by_type:
-                    for error_type, count in sorted(errors_by_type.items(), key=lambda x: x[1], reverse=True)[:10]:
-                        st.write(f"- {error_type}: {count:,}")
-                else:
-                    # Try to extract from error_details
-                    type_counts = {}
-                    for col, errors in error_details.items():
-                        if isinstance(errors, list):
-                            for err in errors:
-                                err_type = err.get("type", "Unknown") if isinstance(err, dict) else "Validation Error"
-                                type_counts[err_type] = type_counts.get(err_type, 0) + 1
-                        elif isinstance(errors, int):
-                            type_counts[col] = errors
-                    
-                    if type_counts:
-                        for err_type, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
-                            st.write(f"- {err_type}: {count:,}")
+            # Row error breakdown
+            if row_errors:
+                # Build breakdowns from the stored error dicts
+                errors_by_type = {}
+                errors_by_column = {}
+                for err in row_errors:
+                    if isinstance(err, dict):
+                        err_type = err.get("error_type", "Unknown")
+                        err_col = err.get("column", "Unknown")
+                        errors_by_type[err_type] = errors_by_type.get(err_type, 0) + 1
+                        errors_by_column[err_col] = errors_by_column.get(err_col, 0) + 1
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Row Errors by Type:**")
+                    if errors_by_type:
+                        for error_type, count in sorted(errors_by_type.items(), key=lambda x: x[1], reverse=True)[:10]:
+                            st.write(f"- {error_type.replace('_', ' ').title()}: {count:,}")
                     else:
-                        st.write("No detailed type breakdown available")
-            
-            with col2:
-                st.markdown("**Errors by Column:**")
-                if errors_by_column:
-                    for col_name, count in sorted(errors_by_column.items(), key=lambda x: x[1], reverse=True)[:10]:
-                        st.write(f"- {col_name}: {count:,}")
-                elif error_details:
-                    col_counts = {}
-                    for col, errors in error_details.items():
-                        if isinstance(errors, list):
-                            col_counts[col] = len(errors)
-                        elif isinstance(errors, int):
-                            col_counts[col] = errors
-                    
-                    if col_counts:
-                        for col_name, count in sorted(col_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+                        st.write("No type breakdown available")
+                
+                with col2:
+                    st.markdown("**Row Errors by Column:**")
+                    if errors_by_column:
+                        for col_name, count in sorted(errors_by_column.items(), key=lambda x: x[1], reverse=True)[:10]:
                             st.write(f"- {col_name}: {count:,}")
                     else:
                         st.write("No column breakdown available")
-                else:
-                    st.write("No column breakdown available")
-            
-            # Show sample errors if available
-            sample_errors = validation_results.get("sample_errors", [])
-            if sample_errors:
-                st.markdown("**Sample Errors:**")
-                for i, err in enumerate(sample_errors[:5]):
+                
+                # Show sample errors
+                st.markdown("**Sample Errors (first 5):**")
+                for i, err in enumerate(row_errors[:5]):
                     if isinstance(err, dict):
-                        st.write(f"{i+1}. Row {err.get('row', '?')}, Col '{err.get('column', '?')}': {err.get('message', err)}")
-                    else:
-                        st.write(f"{i+1}. {err}")
+                        row_num = err.get("row", "?")
+                        col_name = err.get("column", "?")
+                        msg = err.get("message", str(err))
+                        st.write(f"{i+1}. Row {row_num}, Column '{col_name}': {msg}")
+            
+            # Warnings
+            if warnings:
+                st.markdown("**Warnings:**")
+                for w in warnings:
+                    st.warning(w)
         
-        # Suggestions based on error types
         st.markdown("---")
-        st.markdown("**💡 Suggestions:**")
+        st.markdown("**Suggestions:**")
         st.write("- Go back to **Auto-Fix** to apply more fixes")
-        st.write("- Check if mandatory fields are populated")
-        st.write("- Verify date formats are YYYY-MM-DD")
-        st.write("- Ensure enum values match allowed options")
+        st.write("- Check that all required columns are present in the correct order")
+        st.write("- Verify mandatory field values are populated")
+        st.write("- Ensure date formats are YYYY-MM-DD and enum values match the spec")
         
         # Use session state to track if user acknowledged the warning
         warning_key = "export_warning_acknowledged"
