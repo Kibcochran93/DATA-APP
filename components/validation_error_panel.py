@@ -271,24 +271,23 @@ class ValidationErrorPanel:
                     st.info(f"... and {len(col_errors) - 5} more errors in this column")
     
     def _render_single_error(self, error: Any):
-        """Render a single error with details."""
+        """Render a single error with details using native Streamlit components."""
         error_dict = error.to_dict()
         
-        st.markdown(f"""
-        <div style="
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 4px;
-        ">
-            <strong>Column:</strong> {error_dict['column']}<br>
-            <strong>Issue:</strong> {error_dict['message']}<br>
-            <strong>Current Value:</strong> <code>{error_dict['current_value']}</code><br>
-            {f"<strong>Expected:</strong> {error_dict['expected_format']}<br>" if error_dict.get('expected_format') else ""}
-            {f"<strong>Suggestion:</strong> {error_dict['suggestion']}" if error_dict.get('suggestion') else ""}
-        </div>
-        """, unsafe_allow_html=True)
+        with st.container(border=True):
+            col_name = error_dict.get('column', 'Unknown')
+            message = error_dict.get('message', '')
+            current_val = error_dict.get('current_value', 'EMPTY')
+            expected = error_dict.get('expected_format', '')
+            suggestion = error_dict.get('suggestion', '')
+            
+            st.markdown(f"**Column:** {col_name}")
+            st.markdown(f"**Issue:** {message}")
+            st.markdown(f"**Current Value:** `{current_val}`")
+            if expected:
+                st.markdown(f"**Expected:** {expected}")
+            if suggestion:
+                st.markdown(f"**Suggestion:** {suggestion}")
     
     # Maximum cells for styled rendering (Pandas default is 262144)
     # Set slightly below to account for any overhead
