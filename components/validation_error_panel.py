@@ -470,7 +470,8 @@ def render_validation_panel(
 
 def create_error_summary_table(validation_result: Any) -> pd.DataFrame:
     """
-    Create a summary table of all errors for export.
+    Create a summary table of ALL validation issues for export.
+    Includes schema issues (missing columns, wrong order, etc.) and row-level errors.
     
     Args:
         validation_result: ValidationResult object
@@ -478,10 +479,33 @@ def create_error_summary_table(validation_result: Any) -> pd.DataFrame:
     Returns:
         DataFrame with error details
     """
-    if not validation_result.errors:
-        return pd.DataFrame()
-    
     rows = []
+    
+    # Schema issues first (file-level errors)
+    for issue in validation_result.schema_issues:
+        rows.append({
+            "Row Number": "N/A",
+            "Column": "SCHEMA",
+            "Error Type": "Schema Error",
+            "Message": issue,
+            "Current Value": "",
+            "Expected Format": "",
+            "Suggestion": ""
+        })
+    
+    # Warnings
+    for warning in validation_result.warnings:
+        rows.append({
+            "Row Number": "N/A",
+            "Column": "FILE",
+            "Error Type": "Warning",
+            "Message": warning,
+            "Current Value": "",
+            "Expected Format": "",
+            "Suggestion": ""
+        })
+    
+    # Row-level errors
     for error in validation_result.errors:
         rows.append({
             "Row Number": error.row_index + 1,
@@ -493,12 +517,15 @@ def create_error_summary_table(validation_result: Any) -> pd.DataFrame:
             "Suggestion": error.suggestion or ""
         })
     
+    if not rows:
+        return pd.DataFrame()
+    
     return pd.DataFrame(rows)
 
 
 def export_errors_to_csv(validation_result: Any, filename: str = "validation_errors.csv"):
     """
-    Export validation errors to CSV for download.
+    Export full validation report (schema issues + row errors + warnings) to CSV.
     
     Args:
         validation_result: ValidationResult object
@@ -512,8 +539,14 @@ def export_errors_to_csv(validation_result: Any, filename: str = "validation_err
     
     csv = error_df.to_csv(index=False)
     
+    # Summary counts for the button label
+    schema_count = len(validation_result.schema_issues)
+    row_count = len(validation_result.errors)
+    warn_count = len(validation_result.warnings)
+    total = schema_count + row_count + warn_count
+    
     st.download_button(
-        label="Download Error Report (CSV)",
+        label=f"Download Error Report ({total} issues)",
         data=csv,
         file_name=filename,
         mime="text/csv"
