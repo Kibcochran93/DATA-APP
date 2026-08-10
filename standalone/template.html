@@ -22,7 +22,9 @@
   .seg button{font:inherit;padding:9px 14px;border:0;background:#fff;color:var(--ink);cursor:pointer}
   .seg button.active{background:var(--brand);color:#fff}
   .hint{color:var(--muted);font-size:13px;margin:8px 0 0}
-  .drop{margin-top:14px;border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);background:#fbfcfe}
+  .drop{margin-top:14px;border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);background:#fbfcfe;cursor:pointer;transition:border-color .12s,background .12s}
+  .drop.drag{border-color:var(--brand);background:#eef4ff;color:var(--ink)}
+  .drop input[type=file]{margin-top:10px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:4px}
   .stat{background:var(--chipbg);border-radius:10px;padding:12px 14px}
   .stat b{display:block;font-size:22px;line-height:1.2}
@@ -74,16 +76,16 @@
     </div>
 
     <div id="singleWrap">
-      <div class="drop">
-        <div><strong>Drop a CSV or Excel file here</strong>, or</div>
+      <div class="drop" id="singleDrop">
+        <div><strong>Drop a CSV or Excel file here</strong>, or click to browse</div>
         <p class="hint">First sheet, headings in row&nbsp;1.</p>
         <input id="singleFile" type="file" accept=".csv,.xls,.xlsx">
       </div>
     </div>
 
     <div id="dapWrap" class="hidden">
-      <div class="drop">
-        <div><strong>Drop your Canvas DAP table files</strong> (users, enrollments, courses, course_sections, pseudonyms, accounts…), or</div>
+      <div class="drop" id="dapDrop">
+        <div><strong>Drop your Canvas DAP table files</strong> (users, enrollments, courses, course_sections, pseudonyms, accounts…), or click to browse</div>
         <p class="hint">Select multiple CSV/Excel files — tables are matched by filename and joined in your browser.</p>
         <input id="dapFiles" type="file" accept=".csv,.xls,.xlsx" multiple>
       </div>
@@ -202,6 +204,25 @@
   $("dapFiles").addEventListener("change", function(e){ if(e.target.files.length) runDAP(e.target.files); });
   $("dlClean").addEventListener("click", function(){ if(!current) return; download((current.baseName||"seats")+"_"+current.type+"_seats.csv", E.toCSV(current.res.fields, current.res.rows)); });
   $("dlIssues").addEventListener("click", function(){ if(!current) return; download((current.baseName||"seats")+"_issues.csv", E.issuesCSV(current.res.residual)); });
+
+  // Drag-and-drop + click-anywhere-on-the-zone (the input alone isn't obvious).
+  function wireDrop(zoneId, inputId, handler){
+    var zone = $(zoneId), input = $(inputId);
+    zone.addEventListener("click", function(e){ if(e.target !== input) input.click(); });
+    zone.addEventListener("dragover", function(e){ e.preventDefault(); zone.classList.add("drag"); });
+    zone.addEventListener("dragenter", function(e){ e.preventDefault(); zone.classList.add("drag"); });
+    zone.addEventListener("dragleave", function(){ zone.classList.remove("drag"); });
+    zone.addEventListener("drop", function(e){
+      e.preventDefault(); zone.classList.remove("drag");
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if(files && files.length) handler(files);
+    });
+  }
+  wireDrop("singleDrop", "singleFile", function(files){ runSingle(files[0]); });
+  wireDrop("dapDrop", "dapFiles", function(files){ runDAP(files); });
+  // Stop the browser from navigating away if a file is dropped outside a zone.
+  window.addEventListener("dragover", function(e){ e.preventDefault(); });
+  window.addEventListener("drop", function(e){ e.preventDefault(); });
 
   setSpecInfo();
 })();
