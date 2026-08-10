@@ -1,0 +1,4 @@
+user_id,sis_user_id,login_id,first_name,last_name,email,status
+101,S1001,ghopper,Grace,Hopper,g.hopper@uni.edu,active
+102,S1002,aturing,Alan,Turing,a.turing@uni.edu,active
+103,S1003,alovelace,Ada,Lovelace,a.lovelace@uni.edu,active

@@ -1,0 +1,5 @@
+Student Number,First Name,Last Name,Gender,Email Address,Login ID,Course Code,Course Title,Module Code,Module Title,School ID,School Name,Enrolment Notes
+10012345,Grace,Hopper,Female,g.hopper@uni.edu,ghopper,CS,Computer Science,CS101,Intro Programming,1,School of Computing,enrolled
+10012346, Alan ,Turing,Male,a.turing@uni.edu,aturing,CS,Computer Science,CS102,Algorithms,1,School of Computing,enrolled
+10012347,Ada,Lovelace,female,not-an-email,,MATH,Mathematics,MA101,Calculus,2,School of Mathematics,missing login
+10012348,Katherine,Johnson,F,k.johnson@uni.edu,kjohnson,MATH,Mathematics,MA101,Calculus,7,School of Mathematics,school id conflict

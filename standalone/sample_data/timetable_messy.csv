@@ -1,0 +1,6 @@
+EVENT_ID,DAY,START_TIME,END_TIME,ROOM_ID,ROOM_NAME,COURSE_ID,COURSE_NAME,MODULE_ID,MODULE_NAME,SCHOOL_ID,SCHOOL_NAME,STUDENT_ID,LESSON_TYPE
+E1,2026-01-12,09:00,10:00,R1,Room 1,CS,Computer Science,CS101,Intro Programming,1,School of Computing,S1001,L
+E1,2026-01-12,09:00,10:00,R1,Room 1,CS,Computer Science,CS101,Intro Programming,1,School of Computing,S1002,L
+E1,2026-01-12,09:00,10:00,R9,Room 9,CS,Computer Science,CS101,Intro Programming,1,School of Computing,S1001,L
+E2,2026-01-13,14:00,13:00,R2,Room 2,CS,Computer Science,CS102,Algorithms,1,School of Computing,S1002,L
+E3,2026-01-14,,,,,CS,Computer Science,CS103,Databases,1,School of Computing,S1003,V

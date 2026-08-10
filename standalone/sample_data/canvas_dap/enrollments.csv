@@ -1,0 +1,6 @@
+id,user_id,course_id,course_section_id,type,workflow_state
+100,1,500,700,StudentEnrollment,active
+101,2,500,700,StudentEnrollment,active
+102,3,501,710,StudentEnrollment,active
+103,9,500,700,TeacherEnrollment,active
+104,1,500,700,StudentEnrollment,deleted

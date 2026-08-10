@@ -1,0 +1,4 @@
+STUDENT_ID,STUDENT_FORENAME,STUDENT_LAST_NAME,COURSE_ID,COURSE_NAME,MODULE_ID,MODULE_NAME,SCHOOL_ID,SCHOOL_NAME,STUDENT_LOGIN_ID,GENDER,STUDENT_EMAIL
+S1001,Grace,Hopper,CS,Computer Science,CS101,Intro Programming,1,School of Computing,ghopper,F,g.hopper@uni.edu
+S1002,Alan,Turing,CS,Computer Science,CS102,Algorithms,1,School of Computing,aturing,M,a.turing@uni.edu
+S1003,Ada,Lovelace,MATH,Mathematics,MA101,Calculus,2,School of Mathematics,alovelace,F,a.lovelace@uni.edu

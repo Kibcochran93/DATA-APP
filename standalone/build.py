@@ -96,6 +96,14 @@ def main():
     kb = out.stat().st_size / 1024
     print(f"wrote seats_validator.html  ({kb:.0f} KB, self-contained)")
 
+    # Artifact-ready variant: no outer <!doctype>/<html>/<head>/<body> wrapper
+    # (the hosting skeleton supplies those); keep the <style> + inner body + scripts.
+    m_style = re.search(r"<style>.*?</style>", html, re.DOTALL | re.IGNORECASE)
+    m_body = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
+    artifact = (m_style.group(0) if m_style else "") + "\n" + (m_body.group(1) if m_body else html)
+    (HERE / "seats_validator.artifact.html").write_text(artifact, encoding="utf-8")
+    print("wrote seats_validator.artifact.html  (for publishing as a hosted link)")
+
 
 if __name__ == "__main__":
     main()
