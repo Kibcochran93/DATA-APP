@@ -1,43 +1,30 @@
-version: '3.8'
-
 services:
   app:
     build: .
     ports:
       - "8501:8501"
     volumes:
-      - ./src:/app/src
-      - ./config:/app/config
-      - ./security:/app/security
-      - ./autho:/app/autho
-      - ./utils:/app/utils
-      - ./tests:/app/tests
-      - ./deployment:/app/deployment
-      - ./logs:/app/logs
+      # Persist app data (users, exports, logs, encryption key) across restarts.
       - app_data:/app/data
-      - /app/venv
-      - /app/__pycache__
-      - /app/.pytest_cache
+      - app_keys:/app/keys
+      - app_logs:/app/logs
     environment:
+      # Redis is optional; enable it by setting REDIS_ENABLED=true.
+      - REDIS_ENABLED=false
       - REDIS_URL=redis://redis:6379/0
       - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=50
       - MAX_FILE_SIZE=52428800
       - CHUNK_SIZE=1048576
       - UPLOAD_TIMEOUT=60
-      - MAX_CONCURRENT_UPLOADS=10
-      - RATE_LIMIT_REQUESTS=120
-      - RATE_LIMIT_BURST=20
-      - ENCRYPTION_KEY_FILE=/app/keys/encryption.key
-      - LOG_LEVEL=DEBUG
-      - DEBUG=1
-      - ENVIRONMENT=development
-      - PYTHONPATH=/app
+      # Production defaults. DEBUG must stay off outside local dev.
+      - DEBUG=false
+      - APP_ENV=production
+      - ENVIRONMENT=production
       - PYTHONUNBUFFERED=1
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
-      - APP_DATA_DIR=/app/data
-    depends_on:
-      redis:
-        condition: service_healthy
+      # REQUIRED: set a strong, unique secret before deploying. The app falls back
+      # to an insecure default if this is unset — do not rely on that fallback.
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in a .env file or your shell before starting}
     restart: unless-stopped
     networks:
       - app_network
@@ -59,84 +46,28 @@ services:
       retries: 5
       start_period: 120s
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-    networks:
-      - app_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./deployment/prometheus:/etc/prometheus
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
-    ports:
-      - "9090:9090"
-    restart: unless-stopped
-    networks:
-      - monitoring_network
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-  grafana:
-    image: grafana/grafana:latest
-    volumes:
-      - ./deployment/grafana/provisioning:/etc/grafana/provisioning
-      - grafana_data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_SECURITY_DISABLE_GRAVATAR=false
-      - GF_SECURITY_ALLOW_EMBEDDING=true
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
-      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-simple-json-datasource
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-      - GF_SERVER_HTTP_PORT=3000
-      - GF_SERVER_ROOT_URL=http://localhost:3000
-    ports:
-      - "3000:3000"
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - monitoring_network
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+  # Optional: uncomment to run Redis for caching/session storage in Docker,
+  # and set REDIS_ENABLED=true on the app service above.
+  # redis:
+  #   image: redis:7-alpine
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - app_network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 3
 
 volumes:
-  prometheus_data:
-  grafana_data:
-  redis_data:
   app_data:
+  app_keys:
+  app_logs:
+  # redis_data:
 
 networks:
   app_network:
-    driver: bridge
-  monitoring_network:
     driver: bridge

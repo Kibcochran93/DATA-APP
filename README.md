@@ -1,181 +1,125 @@
-# Data Validation and Protection Application
+# SEATS Data Validator
 
-A robust application for data validation, cleaning, and protection with comprehensive error handling and security features.
+A Streamlit app that turns a university's Student Information System (SIS) export
+into a **SEAtS-ready file**. Upload a spreadsheet, map its headings to the SEAtS
+Interface Spec, review validation and data-quality issues, and export a clean
+UTF-8 CSV in the correct SEAtS column order.
 
-## Features
+It supports exports from Banner, PeopleSoft, Workday, Colleague, Jenzabar,
+PowerCampus and generic sources, and validates against the **SEAtS Interface
+Spec v8.2** (Student, Staff and Student Timetable).
 
-- Data validation and cleaning
-- PII detection and masking
-- Secure file processing
-- User authentication and authorization
-- Error tracking and monitoring
-- Comprehensive logging
+## What it does
 
-## Error Handling System
+The core is a guided **7-step wizard**:
 
-The application implements a sophisticated error handling system that provides:
+1. **Upload** — CSV / XLS / XLSX (headings in row 1, first sheet).
+2. **Dataset select** — Student, Staff or Timetable, plus institution hierarchy.
+3. **Header mapping** — auto-suggests SIS → SEAtS column mappings (exact, alias,
+   and fuzzy matching), which you confirm or override.
+4. **Validation** — schema checks (missing / duplicate / mis-ordered columns,
+   near-miss typos) and row checks (mandatory values, date/time/enum formats).
+5. **Auto-fix** — reorder to spec, insert missing columns, generate EVENT_IDs,
+   normalize values, repair encoding/BOM issues.
+6. **Review** — preview the corrected data.
+7. **Export** — download a UTF-8 CSV in SEAtS heading order.
 
-- Consistent error management across components
-- Detailed error logging and tracking
-- User-friendly error messages
-- Security event monitoring
-- Error pattern analysis
+The spec, field metadata and value mappings live in
+`data/master/*.json` and `data/mappings/sis_to_seats_mapping.json`.
 
-### Key Components
+## Supported run modes
 
-1. **Error Classes**
-   - `BaseError`: Foundation for all application errors
-   - `ValidationError`: Data validation failures
-   - `DataError`: Data processing issues
-   - `SecurityError`: Security-related problems
-   - `AuthenticationError`: Authentication failures
-   - `AuthorizationError`: Authorization issues
+Two modes are supported. There is **no** Windows-exe build (a Streamlit app can't
+be meaningfully packaged as a console exe).
 
-2. **Error Handling Functions**
-   - `handle_error`: Central error handling
-   - `track_error`: Error tracking
-   - `setup_error_logging`: Logging configuration
+### 1. Streamlit (primary, local)
 
-3. **Integration Points**
-   - Data cleaning operations
-   - File processing
-   - User authentication
-   - Data validation
-   - Security monitoring
-
-## Project Structure
-
-```
-.
-├── app.py                 # Main application
-├── config.py             # Configuration
-├── docs/                 # Documentation
-│   └── error_handling.md # Error handling docs
-├── security/            # Security components
-├── utils/              # Utility modules
-│   ├── data_cleaner.py # Data cleaning
-│   ├── error_handler.py # Error handling
-│   └── logger.py       # Logging
-└── tests/              # Test suite
+```bash
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-## Getting Started
+The app opens at http://localhost:8501. On Windows you can double-click
+`run_app.bat`, which creates a venv on first run and launches the app.
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Docker (app container)
 
-2. Configure environment:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your settings
-   ```
+```bash
+# Provide a strong secret first (compose requires it):
+echo "JWT_SECRET=$(python -c 'import secrets;print(secrets.token_urlsafe(48))')" > .env
+docker compose up --build
+```
 
-3. Run the application:
-   ```bash
-   streamlit run app.py
-   ```
+The compose file runs the app with production defaults (`DEBUG=false`). Redis is
+optional and off by default — uncomment the `redis` service and set
+`REDIS_ENABLED=true` if you want caching/session storage.
 
-## Building the Executable
+> The previous Prometheus/Grafana monitoring stack was removed: it referenced
+> `./deployment/*` config directories that were never in the repo, so it could
+> not start. In-process metrics are still written under `data/` by
+> `monitoring/monitoring.py`.
 
-### Prerequisites
-- Python 3.8 or higher
-- Windows operating system
-- All dependencies installed
+## Configuration
 
-### Build Steps
+Settings are read from environment variables (see `config/config.py` and
+`security/config.py`). The important ones:
 
-1. Install build dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `JWT_SECRET` | insecure fallback | **Set this.** Signs auth tokens (HS256). |
+| `TEST_MODE` | `false` | `true` bypasses auth — **local dev only**. |
+| `DEBUG` | `false` | `true` shows stack traces in the UI. |
+| `MAX_FILE_SIZE` | 5 MB (manual) | Upload cap; SFTP path allows 50 MB. |
+| `ENCRYPTION_KEY_FILE` | `keys/encryption.key` | Auto-generated on first run if absent. |
 
-2. Run the build script:
-   ```bash
-   python build.py
-   ```
+### Security notes
 
-3. The executable will be created in the `dist` directory:
-   - `dist/DataValidationApp.exe`
+- **`keys/` is gitignored.** A live encryption key was committed to this repo's
+  history in the past — treat it as compromised: rotate it and purge it from
+  history (`git filter-repo` / BFG). A fresh local key is generated automatically
+  when none is present.
+- **Always set `JWT_SECRET`** to a strong, unique value before deploying. The
+  built-in fallback exists only so local dev doesn't crash.
 
-### Running the Executable
+## Testing
 
-1. Navigate to the `dist` directory
-2. Double-click `DataValidationApp.exe` or run from command line:
-   ```bash
-   DataValidationApp.exe
-   ```
+```bash
+pip install -r requirements.txt
+pytest -q
+```
 
-### Build Configuration
+The suite covers the validation engine (`utils/seats_validator.py`,
+`utils/seats_data_handler.py`, `utils/sis_mapper.py`, `utils/data_quality.py`),
+auth, monitoring, protection and the controllers.
 
-The build process:
-- Packages all necessary files and dependencies
-- Includes configuration files
-- Bundles documentation
-- Creates a single executable
+## Project structure
 
-### Troubleshooting Build Issues
-
-1. **Missing Dependencies**
-   - Ensure all requirements are installed
-   - Check for any missing Python packages
-   - Verify Python version compatibility
-
-2. **File Access Issues**
-   - Run as administrator if needed
-   - Check file permissions
-   - Ensure no files are in use
-
-3. **Build Errors**
-   - Check the build log
-   - Verify file paths
-   - Ensure all required files exist
-
-## Error Handling Best Practices
-
-1. **Error Creation**
-   - Use appropriate error classes
-   - Provide clear messages
-   - Include relevant context
-   - Preserve original errors
-
-2. **Error Handling**
-   - Use centralized handling
-   - Provide operation context
-   - Consider user feedback
-   - Track errors appropriately
-
-3. **Logging**
-   - Use appropriate levels
-   - Include full context
-   - Preserve stack traces
-   - Monitor patterns
-
-## Security Features
-
-- Input validation
-- Data sanitization
-- PII protection
-- Access control
-- Security monitoring
-- Audit logging
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## Documentation
-
-- [Error Handling System](docs/error_handling.md)
-- [Security Features](docs/security.md)
-- [API Documentation](docs/api.md)
-- [User Guide](docs/user_guide.md)
+```
+app.py                     # Streamlit entry point + page routing
+wizard_controller.py       # the 7-step validation wizard (core flow)
+ui_components.py            # shared Streamlit UI widgets
+config/config.py           # app config, session keys, dataset types
+security/config.py         # file/auth/protection/monitoring config
+autho/auth.py              # JWT auth, users, roles
+protection/                # PII masking + encryption helpers
+monitoring/                # in-process metrics / health
+controller/                # upload / export / settings / monitoring pages
+components/                # validation error panel
+helpers/                   # logger + header normalization
+utils/
+  seats_data_handler.py    # SEAtS spec mechanics (the workhorse)
+  seats_validator.py       # spec-driven schema + row validation
+  sis_mapper.py            # SIS detection + column/value mapping
+  data_quality.py          # data-quality detection + fixes
+  hierarchy_config.py      # institution hierarchy
+  data_exporter.py / export_packager.py
+data/
+  master/*.json            # SEAtS Interface Spec v8.2 (Student/Staff/Timetable)
+  mappings/*.json          # SIS -> SEAtS column & value mappings
+  test_data/               # sample CSVs (clean + with errors)
+tests/                     # pytest suite
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+MIT — see [LICENSE](LICENSE).

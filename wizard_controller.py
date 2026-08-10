@@ -279,13 +279,11 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
         st.markdown(f"**Required fields:** {len(mandatory_fields)} | **Optional fields:** {len(optional_fields)}")
         
     except ValueError:
-        # Fallback if spec not found
-        try:
-            from utils.master_spec_loader import MasterSpecLoader
-            loader = MasterSpecLoader()
-            expected = loader.get_expected_headers(dataset_type)
-        except Exception:
-            expected = {"mandatory": [], "optional": []}
+        # No built-in spec for this dataset type. Custom/template-derived specs
+        # (see utils.template_spec) are loaded by load_spec_by_type when present;
+        # if none is available we proceed with an empty expectation set so the user
+        # can still map and inspect columns rather than hitting a dead fallback.
+        expected = {"mandatory": [], "optional": []}
         spec = None
     
     current_headers = df.columns.tolist()
@@ -721,9 +719,19 @@ def _render_legacy_validation(wizard_state: WizardState, df_mapped: pd.DataFrame
             }
             
         except ValueError:
-            from utils.validator import validate_dataframe
-            results = validate_dataframe(df_mapped, dataset_type)
-            validation_results = results
+            # No SEAtS spec available for this dataset type — spec validation is
+            # skipped rather than falling back to a removed legacy validator.
+            validation_results = {
+                "is_valid": True,
+                "errors": [],
+                "warnings": [],
+                "total_errors": 0,
+                "total_warnings": 0,
+                "errors_by_column": {},
+                "errors_by_type": {},
+                "sample_errors": [],
+                "message": f"No SEAtS spec available for '{dataset_type}'; spec validation skipped.",
+            }
         
         wizard_state.set_data("validation_results", validation_results)
         wizard_state.set_data("dataframe_mapped", df_mapped)

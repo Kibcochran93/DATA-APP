@@ -4,20 +4,18 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Set environment variables
+# Set environment variables (production defaults).
+# DEBUG stays off and APP_ENV=production so stack traces are never shown to users.
+# JWT_SECRET is intentionally NOT baked in — provide it at runtime (compose/env).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    # Development settings
-    DEBUG=1 \
-    ENVIRONMENT=development \
-    # Security settings (relaxed for dev)
+    DEBUG=false \
+    APP_ENV=production \
+    ENVIRONMENT=production \
     MAX_FILE_SIZE=52428800 \
     CHUNK_SIZE=1048576 \
-    UPLOAD_TIMEOUT=60 \
-    MAX_CONCURRENT_UPLOADS=10 \
-    RATE_LIMIT_REQUESTS=120 \
-    RATE_LIMIT_BURST=20
+    UPLOAD_TIMEOUT=60
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
