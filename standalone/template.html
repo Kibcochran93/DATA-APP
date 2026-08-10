@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEATS Data Validator</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#1a2230; --muted:#5b6675; --line:#e4e8ee;
+    --brand:#2f6fed; --ok:#1f9d55; --warn:#b7791f; --err:#d64545; --chipbg:#eef2f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .wrap{max-width:1000px;margin:0 auto;padding:28px 20px 64px}
+  header h1{margin:0 0 4px;font-size:26px}
+  header p{margin:0;color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:18px}
+  .row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+  label{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+  select,input[type=file]{font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:inherit}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{font:inherit;padding:9px 14px;border:0;background:#fff;color:var(--ink);cursor:pointer}
+  .seg button.active{background:var(--brand);color:#fff}
+  .hint{color:var(--muted);font-size:13px;margin:8px 0 0}
+  .drop{margin-top:14px;border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--muted);background:#fbfcfe}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:4px}
+  .stat{background:var(--chipbg);border-radius:10px;padding:12px 14px}
+  .stat b{display:block;font-size:22px;line-height:1.2}
+  .stat span{color:var(--muted);font-size:12px}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-weight:600;font-size:13px}
+  .badge.ok{background:#e6f5ec;color:var(--ok)} .badge.no{background:#fbe9e9;color:var(--err)}
+  .btn{font:inherit;font-weight:600;padding:10px 16px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer}
+  .btn.secondary{background:#fff;color:var(--brand)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  table{border-collapse:collapse;width:100%;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .sev{font-weight:700}.sev.error{color:var(--err)}.sev.warning{color:var(--warn)}
+  .tablewrap{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:10px}
+  .muted{color:var(--muted)} .hidden{display:none}
+  ul.notes{margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:13px}
+  footer{margin-top:28px;color:var(--muted);font-size:12px;text-align:center}
+  .pill{background:var(--chipbg);border-radius:999px;padding:2px 9px;font-size:12px;margin-left:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>SEATS Data Validator</h1>
+    <p>Drop a file, choose the data type, and download a SEATS-ready file. Everything runs in your browser — your data never leaves this computer.</p>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <div>
+        <label>Data type</label>
+        <select id="type">
+          <option value="Student">Student</option>
+          <option value="Staff">Staff</option>
+          <option value="StudentTimetable">Timetable</option>
+        </select>
+      </div>
+      <div>
+        <label>Source</label>
+        <div class="seg" id="mode">
+          <button data-mode="single" class="active">Single file</button>
+          <button data-mode="dap">Canvas DAP (multiple files)</button>
+        </div>
+      </div>
+      <div>
+        <span id="specInfo" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="singleWrap">
+      <div class="drop">
+        <div><strong>Drop a CSV or Excel file here</strong>, or</div>
+        <p class="hint">First sheet, headings in row&nbsp;1.</p>
+        <input id="singleFile" type="file" accept=".csv,.xls,.xlsx">
+      </div>
+    </div>
+
+    <div id="dapWrap" class="hidden">
+      <div class="drop">
+        <div><strong>Drop your Canvas DAP table files</strong> (users, enrollments, courses, course_sections, pseudonyms, accounts…), or</div>
+        <p class="hint">Select multiple CSV/Excel files — tables are matched by filename and joined in your browser.</p>
+        <input id="dapFiles" type="file" accept=".csv,.xls,.xlsx" multiple>
+      </div>
+    </div>
+
+    <div id="message" class="hint hidden"></div>
+  </section>
+
+  <section id="results" class="card hidden">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Result</h2>
+      <div><span id="importBadge" class="badge"></span></div>
+    </div>
+    <div class="grid" id="stats"></div>
+    <ul class="notes" id="notes"></ul>
+
+    <div class="actions">
+      <button class="btn" id="dlClean" disabled>Download SEATS file (CSV)</button>
+      <button class="btn secondary" id="dlIssues" disabled>Download issues report</button>
+    </div>
+
+    <h3 style="margin:22px 0 0">Issues that still need attention <span class="pill" id="issueCount">0</span></h3>
+    <p class="muted" style="margin:4px 0 0;font-size:13px">Rows are spreadsheet row numbers (header = row 1). "error" = blocks import; "warning" = worth checking.</p>
+    <div class="tablewrap" id="issuesWrap"><table id="issuesTable"><thead><tr><th>Row</th><th>Column</th><th>Severity</th><th>Issue</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <footer>SEATS ONE · Standalone Data Validator · runs entirely in your browser</footer>
+</div>
+
+<!--INJECT_SHEETJS-->
+<!--INJECT_DATA-->
+<!--INJECT_ENGINE-->
+<script>
+(function(){
+  var E = window.SeatsEngine, DATA = window.SEATS_DATA;
+  var $ = function(id){ return document.getElementById(id); };
+  var mode = "single", current = null;
+
+  function setSpecInfo(){
+    var s = DATA.specs[$("type").value];
+    $("specInfo").textContent = s ? (s.fields.length + " columns · " + s.mandatory.length + " required") : "";
+  }
+  function msg(text){ var m = $("message"); if(!text){ m.classList.add("hidden"); return; } m.textContent = text; m.classList.remove("hidden"); }
+
+  async function parseFile(file){
+    var buf = await file.arrayBuffer();
+    var wb = XLSX.read(buf, {type:"array", cellDates:false, raw:false});
+    var sheet = wb.Sheets[wb.SheetNames[0]];
+    var matrix = XLSX.utils.sheet_to_json(sheet, {header:1, defval:"", raw:false});
+    var headers = (matrix[0]||[]).map(function(h){ return String(h).trim(); }).filter(function(h){ return h!==""; });
+    var rows = XLSX.utils.sheet_to_json(sheet, {defval:"", raw:false});
+    return {headers:headers, rows:rows};
+  }
+
+  function render(res, notes, baseName, type){
+    current = {res:res, baseName:baseName, type:type};
+    $("results").classList.remove("hidden");
+    var s = res.summary;
+    $("importBadge").className = "badge " + (s.importable ? "ok" : "no");
+    $("importBadge").textContent = s.importable ? "Importable" : (s.errorCount + " blocking issue" + (s.errorCount===1?"":"s"));
+    $("stats").innerHTML =
+      stat(s.rows, "Rows") + stat(s.columns, "Columns (spec)") +
+      stat(s.mandatoryBlankCells, "Blank required cells") +
+      stat(s.errorCount, "Errors") + stat(s.warningCount, "Warnings");
+    $("notes").innerHTML = (notes||[]).map(function(n){ return "<li>"+esc(n)+"</li>"; }).join("");
+    $("issueCount").textContent = res.residual.length;
+    var body = $("issuesTable").querySelector("tbody");
+    body.innerHTML = res.residual.slice(0,1000).map(function(i){
+      return "<tr><td>"+(i.row==null?"":i.row)+"</td><td>"+esc(i.column||"")+"</td><td class='sev "+i.severity+"'>"+i.severity+"</td><td>"+esc(i.message)+"</td></tr>";
+    }).join("") || "<tr><td colspan='4' class='muted'>No issues — ready to import.</td></tr>";
+    $("dlClean").disabled = false; $("dlIssues").disabled = false;
+  }
+  function stat(v, label){ return "<div class='stat'><b>"+(typeof v==="number"?v.toLocaleString():v)+"</b><span>"+label+"</span></div>"; }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>\"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c]; }); }
+
+  function download(name, text){
+    var blob = new Blob([text], {type:"text/csv;charset=utf-8"});
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  async function runSingle(file){
+    try{
+      msg("Reading " + file.name + " …");
+      var parsed = await parseFile(file);
+      var res = E.autoClean(parsed.headers, parsed.rows, $("type").value, DATA);
+      var base = file.name.replace(/\.(csv|xlsx?|xls)$/i, "");
+      render(res, ["Auto-mapped " + Object.keys(res.rename).length + " column(s); " + res.summary.rows + " row(s) processed."], base, $("type").value);
+      msg("");
+    }catch(e){ msg("Could not read that file. Use a CSV/XLS/XLSX with headings in row 1. (" + e.message + ")"); }
+  }
+
+  async function runDAP(files){
+    try{
+      msg("Reading " + files.length + " DAP table file(s) …");
+      var tables = {};
+      for(var i=0;i<files.length;i++){ var p = await parseFile(files[i]); tables[files[i].name] = p.rows; }
+      var roster = E.buildRoster(tables, $("type").value);
+      var res = E.autoClean(roster.headers, roster.rows, $("type").value, DATA);
+      render(res, roster.notes, "canvas_dap", $("type").value);
+      msg("");
+    }catch(e){ msg("Could not build the roster: " + e.message); }
+  }
+
+  // Wiring
+  Array.prototype.forEach.call($("mode").children, function(btn){
+    btn.onclick = function(){
+      Array.prototype.forEach.call($("mode").children, function(b){ b.classList.remove("active"); });
+      btn.classList.add("active"); mode = btn.getAttribute("data-mode");
+      $("singleWrap").classList.toggle("hidden", mode!=="single");
+      $("dapWrap").classList.toggle("hidden", mode!=="dap");
+    };
+  });
+  $("type").addEventListener("change", function(){ setSpecInfo(); if(current) { if(mode==="single" && $("singleFile").files[0]) runSingle($("singleFile").files[0]); } });
+  $("singleFile").addEventListener("change", function(e){ if(e.target.files[0]) runSingle(e.target.files[0]); });
+  $("dapFiles").addEventListener("change", function(e){ if(e.target.files.length) runDAP(e.target.files); });
+  $("dlClean").addEventListener("click", function(){ if(!current) return; download((current.baseName||"seats")+"_"+current.type+"_seats.csv", E.toCSV(current.res.fields, current.res.rows)); });
+  $("dlIssues").addEventListener("click", function(){ if(!current) return; download((current.baseName||"seats")+"_issues.csv", E.issuesCSV(current.res.residual)); });
+
+  setSpecInfo();
+})();
+</script>
+</body>
+</html>
