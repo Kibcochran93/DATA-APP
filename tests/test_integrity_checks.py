@@ -133,6 +133,14 @@ def test_heal_headers_no_change_when_pattern_absent():
     assert heal_headers(headers) == ["STUDENT_ID", "", "COURSE_ID"]
 
 
+def test_heal_headers_recognizes_pandas_unnamed_placeholder():
+    # pandas names a blank header column "Unnamed: N" on read.
+    headers = ["STUDENT_ID", "VISAREQUIRED", "Unnamed: 2", "COURSE_ID"]
+    assert heal_headers(headers) == [
+        "STUDENT_ID", "VISAREQUIRED", "BADGENUMBER", "COURSE_ID",
+    ]
+
+
 # --- aggregator -----------------------------------------------------------
 
 def test_run_all_combines_checks():

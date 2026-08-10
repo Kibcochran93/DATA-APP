@@ -19,9 +19,13 @@ so callers (the wizard, tests, CLI) can display them uniformly.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+
+# pandas names blank header cells "Unnamed: N" on read; treat those as blank.
+_PANDAS_BLANK = re.compile(r"^unnamed:\s*\d+$", re.I)
 
 # Header row is row 1, so the first data row is row 2 (matches the v2.1 tool and
 # what a user sees in Excel).
@@ -224,9 +228,13 @@ def heal_headers(headers: List[str]) -> List[str]:
     the blank is the BADGENUMBER column; fill it in. Returns a new list.
     """
     healed = [("" if h is None else str(h)).strip() for h in headers]
+
+    def _is_blank(name: str) -> bool:
+        return name == "" or bool(_PANDAS_BLANK.match(name))
+
     for i, name in enumerate(healed):
         if name.upper() == "VISAREQUIRED" and i + 2 < len(healed):
-            if healed[i + 1] == "" and healed[i + 2].upper() == "COURSE_ID":
+            if _is_blank(healed[i + 1]) and healed[i + 2].upper() == "COURSE_ID":
                 healed[i + 1] = "BADGENUMBER"
     return healed
 

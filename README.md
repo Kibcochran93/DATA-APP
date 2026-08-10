@@ -27,6 +27,26 @@ The core is a guided **7-step wizard**:
 The spec, field metadata and value mappings live in
 `data/master/*.json` and `data/mappings/sis_to_seats_mapping.json`.
 
+### Data-integrity & convenience features
+
+Folded in from the standalone SEAtS Data Validator v2.1 tool:
+
+- **Custom dataset from a template** — on the dataset step, drop in a SEAtS
+  template spreadsheet. Its headers become the field set and green-highlighted
+  (mandatory) headers are detected automatically, so you can validate dataset
+  types that have no bundled JSON spec (`utils/template_spec.py`).
+- **Remembered mappings** — header mappings are saved per file layout and
+  auto-applied the next time you upload a file with the same headings
+  (`utils/mapping_memory.py`, stored under `data/runtime/`).
+- **Profile before export** — entity counts (unique students, courses, modules,
+  schools, …) with drill-down, to sanity-check an import (`utils/data_profile.py`).
+- **Cross-row integrity checks** — name↔ID 1:many conflicts, students with
+  multiple login IDs, and timetable event-consistency (per-EVENT_ID consistency,
+  duplicate student-per-event, site/building all-or-nothing)
+  (`utils/integrity_checks.py`).
+- **BADGENUMBER header auto-heal** — repairs the known SEAtS template quirk where
+  the BADGENUMBER header is blank, on upload.
+
 ## Supported run modes
 
 Two modes are supported. There is **no** Windows-exe build (a Streamlit app can't

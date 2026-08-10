@@ -152,7 +152,12 @@ def render_step_upload(wizard_state: WizardState) -> None:
                 df = pd.read_csv(uploaded_file)
             else:
                 df = pd.read_excel(uploaded_file)
-            
+
+            # Repair the known SEAtS template quirk (blank BADGENUMBER header) and
+            # strip stray header whitespace before anything else touches the data.
+            from utils.integrity_checks import heal_headers
+            df.columns = heal_headers(list(df.columns))
+
             # Store in wizard state
             wizard_state.set_data("dataframe", df)
             wizard_state.set_data("filename", uploaded_file.name)
@@ -207,7 +212,42 @@ def render_step_dataset_select(wizard_state: WizardState) -> None:
             with st.expander(f"Preview: {wizard_state.get_data('filename', 'data')}", expanded=False):
                 st.dataframe(df.head(5))
                 st.caption(f"{len(df):,} rows, {len(df.columns)} columns")
-    
+
+        # --- Custom dataset from a SEAtS template (ported from v2.1) ---
+        st.markdown("#### Or define the dataset from a SEAtS template")
+        st.caption(
+            "Drop in a SEAtS template spreadsheet to derive the expected columns "
+            "automatically — headers highlighted green are detected as mandatory. "
+            "This overrides the built-in spec and unlocks dataset types that have "
+            "no bundled JSON spec."
+        )
+        template_file = st.file_uploader(
+            "Upload a SEAtS template (.xlsx or .csv)",
+            type=["xlsx", "csv"],
+            key="custom_template_upload",
+        )
+        if template_file is not None:
+            try:
+                from utils.template_spec import derive_spec_from_template
+                custom_spec = derive_spec_from_template(
+                    template_file.getvalue(),
+                    dataset_type=dataset_type,
+                    filename=template_file.name,
+                )
+                wizard_state.set_data("custom_spec", custom_spec)
+                st.success(
+                    f"Custom spec active from '{template_file.name}': "
+                    f"{len(custom_spec['fields'])} fields, "
+                    f"{len(custom_spec['mandatory_fields'])} mandatory."
+                )
+            except Exception as exc:
+                log_exception(exc, logger, {"action": "derive_custom_spec"})
+                st.error(f"Could not read that template: {exc}")
+        if wizard_state.get_data("custom_spec"):
+            if st.button("Clear custom spec"):
+                wizard_state.set_data("custom_spec", None)
+                st.rerun()
+
     with tab2:
         try:
             from utils.hierarchy_config import (
@@ -260,11 +300,15 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
         st.error("No data loaded. Please go back to upload.")
         return
     
-    # Get expected headers from SEATS spec
+    # Get expected headers from SEATS spec (a custom/template spec wins).
+    custom_spec = wizard_state.get_data("custom_spec")
     try:
-        from utils.seats_data_handler import load_spec_by_type
-        spec = load_spec_by_type(dataset_type)
-        
+        if custom_spec:
+            spec = custom_spec
+        else:
+            from utils.seats_data_handler import load_spec_by_type
+            spec = load_spec_by_type(dataset_type)
+
         mandatory_fields = spec.get('mandatory_fields', [])
         all_fields = list(spec.get('fields', {}).keys())
         optional_fields = [f for f in all_fields if f not in mandatory_fields]
@@ -437,7 +481,19 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
     
     # Get any existing mappings (from SIS or previous manual selection)
     existing_mapping = wizard_state.get_data("header_mapping", {})
-    
+
+    # Persisted mapping memory (ported from v2.1): if we've mapped a file with this
+    # exact set of headings before, pre-fill those choices automatically.
+    from utils.mapping_memory import mapping_signature, get_saved_mapping
+    _mm_sig = mapping_signature(wizard_state.get_data("dataset_type") or "", current_headers)
+    if not existing_mapping and wizard_state.get_data("mapping_seeded_sig") != _mm_sig:
+        _saved_mapping = get_saved_mapping(_mm_sig)
+        if _saved_mapping:
+            existing_mapping = dict(_saved_mapping)
+            wizard_state.set_data("header_mapping", existing_mapping)
+            wizard_state.set_data("mapping_seeded_sig", _mm_sig)
+            st.info("↩ Applied a remembered mapping for this file layout.")
+
     # Auto-suggest additional mappings using legacy method
     file_cols_set = set(current_headers)
     auto_suggestions = _suggest_column_mappings(file_cols_set, expected.get("mandatory", []))
@@ -531,6 +587,15 @@ def render_step_header_mapping(wizard_state: WizardState) -> None:
             st.rerun()
     with col2:
         if st.button("Continue to Validation", type="primary"):
+            # Remember this mapping for the next file with the same headings.
+            try:
+                from utils.mapping_memory import mapping_signature, save_mapping
+                save_mapping(
+                    mapping_signature(wizard_state.get_data("dataset_type") or "", current_headers),
+                    final_mapping,
+                )
+            except Exception as exc:  # best-effort; never block the wizard
+                log_exception(exc, logger, {"action": "save_mapping_memory"})
             wizard_state.next_step()
             st.rerun()
 
@@ -561,14 +626,19 @@ def render_step_validation(wizard_state: WizardState) -> None:
             from utils.data_quality import analyze_data_quality, DataQualityReport
             from utils.seats_data_handler import load_spec_by_type
             
-            # Load spec for data quality analysis
-            try:
-                spec = load_spec_by_type(dataset_type)
-            except Exception:
-                spec = None
-            
+            # Prefer a custom/template-derived spec if the user supplied one
+            # (utils.template_spec); otherwise load the built-in v8.2 spec.
+            custom_spec = wizard_state.get_data("custom_spec")
+            if custom_spec:
+                spec = custom_spec
+            else:
+                try:
+                    spec = load_spec_by_type(dataset_type)
+                except Exception:
+                    spec = None
+
             # Run SEATS spec validation
-            validation_result = validate_dataset(df_mapped, dataset_type)
+            validation_result = validate_dataset(df_mapped, dataset_type, spec=spec)
             
             # Run data quality analysis
             quality_report = analyze_data_quality(df_mapped, spec)
@@ -593,7 +663,38 @@ def render_step_validation(wizard_state: WizardState) -> None:
                 "rows_affected": validation_result.to_summary()["rows_affected"],
             }
             wizard_state.set_data("validation_results", validation_results)
-            
+
+            # --- Cross-row integrity checks (ported from SEAtS Validator v2.1) ---
+            from utils.integrity_checks import run_all as run_integrity_checks
+            integrity_issues = run_integrity_checks(df_mapped, dataset_type)
+            wizard_state.set_data("integrity_issues", integrity_issues)
+            st.markdown("### Cross-row Integrity Checks")
+            if integrity_issues:
+                i_err = sum(1 for i in integrity_issues if i["type"] == "error")
+                col1, col2 = st.columns(2)
+                col1.metric("Integrity errors", i_err)
+                col2.metric("Integrity warnings", len(integrity_issues) - i_err)
+                st.dataframe(
+                    pd.DataFrame(integrity_issues)[["row", "field", "type", "message"]],
+                    use_container_width=True,
+                )
+            else:
+                st.success("No cross-row integrity issues found.")
+
+            # --- Profile the data before export (ported from v2.1) ---
+            from utils.data_profile import profile_dataframe
+            profile_cards = profile_dataframe(df_mapped, dataset_type)
+            if profile_cards:
+                st.markdown("### Data Profile")
+                st.caption("Sanity-check the entity counts before exporting.")
+                cols = st.columns(min(4, len(profile_cards)))
+                for idx, card in enumerate(profile_cards):
+                    with cols[idx % len(cols)]:
+                        st.metric(card["label"], f"{card['count']:,}")
+                        if card["kind"] == "values" and card["values"]:
+                            with st.expander("View values"):
+                                st.write(", ".join(str(v) for v in card["values"][:200]))
+
             # Display Data Quality Issues first
             quality_summary = quality_report.to_summary()
             if quality_summary["total_issues"] > 0:

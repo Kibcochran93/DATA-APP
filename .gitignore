@@ -165,6 +165,12 @@ venv.bak/
 # pytest scratch (used on machines where the default temp base isn't writable)
 .pytmp/
 
+# App runtime data written on the local machine (mapping memory, exports, etc.)
+data/runtime/
+data/exports/
+data/temp/
+data/backup/
+
 # mypy
 .mypy_cache/
 .dmypy.json
