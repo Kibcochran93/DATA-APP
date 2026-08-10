@@ -165,6 +165,9 @@ venv.bak/
 # pytest scratch (used on machines where the default temp base isn't writable)
 .pytmp/
 
+# npm (only used to fetch SheetJS; the clean build is vendored under standalone/vendor/)
+node_modules/
+
 # App runtime data written on the local machine (mapping memory, exports, etc.)
 data/runtime/
 data/exports/

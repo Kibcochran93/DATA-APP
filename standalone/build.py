@@ -62,18 +62,31 @@ def build_data() -> dict:
     return {"specs": specs, "columnMappings": column_mappings, "enumExpansions": ENUM_EXPANSIONS}
 
 
-def extract_sheetjs(v21_path: Path) -> str:
-    """Return the first <script>...</script> block that contains SheetJS."""
-    html = v21_path.read_text(encoding="utf-8", errors="replace")
-    for m in re.finditer(r"<script\b[^>]*>.*?</script>", html, re.DOTALL | re.IGNORECASE):
-        if "SheetJS" in m.group(0) or "xlsx.js" in m.group(0):
-            return m.group(0)
-    raise SystemExit("Could not find the SheetJS <script> block in " + str(v21_path))
+VENDOR_SHEETJS = HERE / "vendor" / "xlsx.core.min.js"
+
+
+def read_sheetjs(v21_path=None) -> str:
+    """Return a <script> block containing SheetJS.
+
+    Prefers the vendored clean build (standalone/vendor/xlsx.core.min.js — the
+    SheetJS 'core' dist, which has no U+FFFD codepage glyphs so it publishes as a
+    hosted Artifact). Falls back to extracting from a v2.1-style HTML if the
+    vendored file is missing (that blob contains U+FFFD and is not publishable).
+    """
+    if VENDOR_SHEETJS.exists():
+        return ("<script>\n/*! SheetJS (xlsx) core build — https://sheetjs.com — Apache-2.0 */\n"
+                + VENDOR_SHEETJS.read_text(encoding="utf-8") + "\n</script>")
+    if v21_path and Path(v21_path).exists():
+        html = Path(v21_path).read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r"<script\b[^>]*>.*?</script>", html, re.DOTALL | re.IGNORECASE):
+            if "SheetJS" in m.group(0) or "xlsx.js" in m.group(0):
+                return m.group(0)
+    raise SystemExit("No SheetJS found. Run `npm install xlsx` and re-copy, or keep "
+                     "standalone/vendor/xlsx.core.min.js in the repo.")
 
 
 def main():
-    v21 = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-        r"C:/Users/KibCochran/Downloads/SEAtS_Data_Validator_v2_1(1) 1.html")
+    v21 = sys.argv[1] if len(sys.argv) > 1 else None
 
     data = build_data()
     (HERE / "seats_data.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -82,7 +95,7 @@ def main():
 
     template = (HERE / "template.html").read_text(encoding="utf-8")
     engine = (HERE / "engine.js").read_text(encoding="utf-8")
-    sheetjs = extract_sheetjs(v21)
+    sheetjs = read_sheetjs(v21)
     data_script = "<script>window.SEATS_DATA = " + json.dumps(data) + ";</script>"
     engine_script = "<script>\n" + engine + "\n</script>"
 
