@@ -162,6 +162,9 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# pytest scratch (used on machines where the default temp base isn't writable)
+.pytmp/
+
 # mypy
 .mypy_cache/
 .dmypy.json
