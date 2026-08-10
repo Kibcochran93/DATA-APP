@@ -134,6 +134,14 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# Secrets — never commit encryption keys.
+# NOTE: keys/encryption.key was previously committed to this repo's history.
+# It must be treated as compromised: rotate it and purge it from git history
+# (e.g. git filter-repo / BFG). security.config.get_encryption_key() will
+# generate a fresh local key on first run if none is present.
+/keys/*
+!/keys/.gitkeep
+
 # Environments
 .env
 .envrc
