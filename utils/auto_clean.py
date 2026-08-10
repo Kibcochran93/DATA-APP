@@ -133,7 +133,10 @@ def _auto_map_columns(df: pd.DataFrame, spec: Dict[str, Any], min_confidence: fl
         rename[col] = target
         claimed.add(tu)
 
-    # 2. Fuzzy fallback for anything still unmapped.
+    # 2. Fuzzy fallback for anything still unmapped. A column whose name is already
+    #    a valid spec field is left alone — never fuzzy-remapped to something else
+    #    (some SIS alias lists cross-list names, e.g. MODULE_NAME <- "COURSE_NAME").
+    spec_fields_norm = {_norm(f) for f in spec_fields}
     try:
         for m in sorted(suggest_mappings(df), key=lambda x: -x.confidence):
             if m.confidence < min_confidence:
@@ -141,6 +144,8 @@ def _auto_map_columns(df: pd.DataFrame, spec: Dict[str, Any], min_confidence: fl
             if m.target_column.upper() not in spec_fields_upper:
                 continue
             if m.source_column not in df.columns or m.source_column in rename:
+                continue
+            if _norm(m.source_column) in spec_fields_norm:
                 continue
             tu = m.target_column.upper()
             if tu in existing_upper or tu in claimed or m.source_column.upper() == tu:
