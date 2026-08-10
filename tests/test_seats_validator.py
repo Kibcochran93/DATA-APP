@@ -53,8 +53,11 @@ def _student_df(values=None):
         "STUDENT_LAST_NAME": "Lovelace",
         "VISAREQUIRED": "N",
         "COURSE_ID": "C1",
+        "COURSE_NAME": "Computing",
         "MODULE_ID": "M1",
+        "MODULE_NAME": "Analytical Engines",
         "SCHOOL_ID": "SCH1",
+        "SCHOOL_NAME": "Engineering",
         "STUDENT_LOGIN_ID": "alovelace",
     }
     if values:

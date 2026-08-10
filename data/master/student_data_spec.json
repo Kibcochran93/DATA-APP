@@ -11,10 +11,12 @@
     "STUDENT_ID",
     "STUDENT_FORENAME",
     "STUDENT_LAST_NAME",
-    "VISAREQUIRED",
     "COURSE_ID",
+    "COURSE_NAME",
     "MODULE_ID",
+    "MODULE_NAME",
     "SCHOOL_ID",
+    "SCHOOL_NAME",
     "STUDENT_LOGIN_ID"
   ],
   "fields": {
@@ -128,7 +130,7 @@
       "position": 10,
       "description": "Is Tier4 Student",
       "type": "enum",
-      "mandatory": true,
+      "mandatory": false,
       "values": [
         "Y",
         "N"
@@ -173,7 +175,7 @@
       "position": 15,
       "description": "Course/Programme Name",
       "type": "str",
-      "mandatory": false,
+      "mandatory": true,
       "max_length": 200,
       "cross_file_match": true,
       "notes": "Must match COURSE_NAME in Timetable file"
@@ -226,7 +228,7 @@
       "position": 21,
       "description": "Module Name",
       "type": "str",
-      "mandatory": false,
+      "mandatory": true,
       "max_length": 200,
       "cross_file_match": true,
       "notes": "Must match MODULE_NAME in Timetable file"
@@ -252,7 +254,7 @@
       "position": 24,
       "description": "School Name for the module",
       "type": "str",
-      "mandatory": false,
+      "mandatory": true,
       "max_length": 200,
       "cross_file_match": true,
       "notes": "Must match SCHOOL_NAME in Timetable file"
