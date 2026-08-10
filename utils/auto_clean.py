@@ -63,28 +63,39 @@ def _norm(value: str) -> str:
 
 
 def _build_alias_index(spec_fields: List[str]) -> Dict[str, str]:
-    """normalized source-alias -> SEAtS field, across ALL SIS systems + exact names.
+    """normalized source-alias -> SEAtS field, across ALL SIS *and* LMS systems.
 
-    Detection can misfire on jumbled/partial files (e.g. a lone SPRIDEN_ID detects
-    as GENERIC), so we match aliases from every system rather than only the
-    detected one.
+    Reads both the SIS and LMS mapping vocabularies (an LMS such as Canvas is a
+    separate source category from an SIS). Matches aliases from every system, not
+    just a detected one, because detection misfires on jumbled/partial files.
     """
-    from utils.sis_mapper import SISMapper
-
     spec_fields_upper = {f.upper() for f in spec_fields}
-    index: Dict[str, str] = {}
+
+    sources: List[Dict[str, Any]] = []
     try:
-        column_mappings = SISMapper().column_mappings  # {FIELD: {system: [aliases]}}
+        from utils.sis_mapper import SISMapper
+        sources.append(SISMapper().column_mappings)   # {FIELD: {system: [aliases], "description": str}}
     except Exception:
-        column_mappings = {}
-    for seats_field, systems in column_mappings.items():
-        if seats_field.upper() not in spec_fields_upper:
-            continue
-        index.setdefault(_norm(seats_field), seats_field)
-        if isinstance(systems, dict):
-            for aliases in systems.values():
-                for alias in (aliases or []):
-                    index.setdefault(_norm(alias), seats_field)
+        pass
+    try:
+        from utils.lms_mapper import get_lms_column_mappings
+        sources.append(get_lms_column_mappings())
+    except Exception:
+        pass
+
+    index: Dict[str, str] = {}
+    for column_mappings in sources:
+        for seats_field, systems in column_mappings.items():
+            if seats_field.upper() not in spec_fields_upper:
+                continue
+            index.setdefault(_norm(seats_field), seats_field)
+            if isinstance(systems, dict):
+                for value in systems.values():
+                    # Entries also carry a "description" string — only alias lists count.
+                    if not isinstance(value, list):
+                        continue
+                    for alias in value:
+                        index.setdefault(_norm(alias), seats_field)
     # Exact spec names always win for their own key.
     for field_name in spec_fields:
         index.setdefault(_norm(field_name), field_name)
@@ -101,16 +112,26 @@ def _auto_map_columns(df: pd.DataFrame, spec: Dict[str, Any], min_confidence: fl
     spec_fields_upper = {f.upper() for f in spec_fields}
     alias_index = _build_alias_index(spec_fields)
 
-    taken = {c.upper() for c in df.columns}
+    existing_upper = {c.upper() for c in df.columns}
+    claimed: set = set()          # target fields already assigned by a rename
     rename: Dict[str, str] = {}
 
-    # 1. Deterministic alias match (across all SIS systems).
+    # 1. Deterministic alias match (across all SIS + LMS systems), incl. case fixes.
     for col in df.columns:
         target = alias_index.get(_norm(col))
-        if not target or target.upper() in taken or col.upper() == target.upper():
+        if not target:
+            continue
+        tu = target.upper()
+        if col.upper() == tu:
+            # Same field, wrong case (e.g. course_id -> COURSE_ID): canonicalize.
+            if col != target:
+                rename[col] = target
+                claimed.add(tu)
+            continue
+        if tu in existing_upper or tu in claimed:
             continue
         rename[col] = target
-        taken.add(target.upper())
+        claimed.add(tu)
 
     # 2. Fuzzy fallback for anything still unmapped.
     try:
@@ -121,10 +142,11 @@ def _auto_map_columns(df: pd.DataFrame, spec: Dict[str, Any], min_confidence: fl
                 continue
             if m.source_column not in df.columns or m.source_column in rename:
                 continue
-            if m.target_column.upper() in taken or m.source_column.upper() == m.target_column.upper():
+            tu = m.target_column.upper()
+            if tu in existing_upper or tu in claimed or m.source_column.upper() == tu:
                 continue
             rename[m.source_column] = m.target_column
-            taken.add(m.target_column.upper())
+            claimed.add(tu)
     except Exception:
         pass
 
@@ -155,11 +177,19 @@ def _force_spec_shape(df: pd.DataFrame, spec: Dict[str, Any], actions: List[str]
                            f"{spec.get('dataset_type', 'selected')} spec.")
         if report.get("inserted"):
             actions.append(f"Inserted {len(report['inserted'])} missing spec column(s) (blank).")
-    # Defensive: guarantee exactly the spec columns, in spec order.
-    ordered = [f for f in get_ordered_fields(spec)]
+    # Defensive: guarantee exactly the spec columns, in spec order (case-insensitive
+    # so a case-variant column is canonicalized, not blanked-and-dropped).
+    ordered = get_ordered_fields(spec)
+    upper_to_actual = {c.upper(): c for c in df.columns}
+    case_rename = {}
     for f in ordered:
-        if f not in df.columns:
+        actual = upper_to_actual.get(f.upper())
+        if actual is None:
             df[f] = ""
+        elif actual != f:
+            case_rename[actual] = f
+    if case_rename:
+        df = df.rename(columns=case_rename)
     return df[ordered]
 
 

@@ -1,0 +1,94 @@
+{
+  "version": "1.0",
+  "description": "LMS to SEATS Column Mapping - maps common Learning Management System exports (Canvas, Blackboard, Moodle, Brightspace) to SEATS format. An LMS is a data SOURCE that feeds the SEATS Student spec, distinct from an SIS.",
+  "supported_systems": ["Canvas", "Blackboard", "Moodle", "Brightspace", "Generic"],
+
+  "column_mappings": {
+    "STUDENT_ID": {
+      "description": "Student unique identifier (prefer the institution's SIS id over the LMS-internal id)",
+      "canvas": ["sis_user_id", "sis user id", "user_id", "canvas_user_id", "integration_id", "student_id", "student id"],
+      "blackboard": ["student_id", "user_id", "pk1", "username"],
+      "moodle": ["idnumber", "id_number", "userid", "user_id"],
+      "brightspace": ["orgdefinedid", "org_defined_id", "username", "user_id"],
+      "generic": ["student_id", "user_id", "id_number", "sis_id"]
+    },
+    "STUDENT_FORENAME": {
+      "description": "Student first name",
+      "canvas": ["first_name", "first name", "given_name"],
+      "blackboard": ["first_name", "firstname", "given name"],
+      "moodle": ["firstname", "first_name"],
+      "brightspace": ["firstname", "first_name"],
+      "generic": ["first_name", "firstname", "given_name"]
+    },
+    "STUDENT_LAST_NAME": {
+      "description": "Student last name",
+      "canvas": ["last_name", "last name", "family_name", "surname"],
+      "blackboard": ["last_name", "lastname", "surname"],
+      "moodle": ["lastname", "last_name", "surname"],
+      "brightspace": ["lastname", "last_name", "surname"],
+      "generic": ["last_name", "lastname", "surname", "family_name"]
+    },
+    "STUDENT_LOGIN_ID": {
+      "description": "Login / username used to access the LMS",
+      "canvas": ["login_id", "sis_login_id", "sis login id", "login id", "username"],
+      "blackboard": ["username", "user_name", "login_id"],
+      "moodle": ["username", "user_name"],
+      "brightspace": ["username", "user_name", "login_id"],
+      "generic": ["login_id", "username", "user_name"]
+    },
+    "STUDENT_EMAIL": {
+      "description": "Student email address",
+      "canvas": ["email", "email_address", "login_email"],
+      "blackboard": ["email", "email_address"],
+      "moodle": ["email", "email_address"],
+      "brightspace": ["email", "email_address"],
+      "generic": ["email", "email_address"]
+    },
+    "COURSE_ID": {
+      "description": "Course unique identifier",
+      "canvas": ["course_id", "sis_course_id", "course id", "sis course id"],
+      "blackboard": ["course_id", "external_course_key", "course_key"],
+      "moodle": ["course", "course_id", "course_shortname"],
+      "brightspace": ["orgunitid", "org_unit_id", "course_offering_id"],
+      "generic": ["course_id", "course_code"]
+    },
+    "COURSE_NAME": {
+      "description": "Course name / title",
+      "canvas": ["long_name", "course_name", "long name", "short_name", "course"],
+      "blackboard": ["course_name", "course_title"],
+      "moodle": ["course_fullname", "fullname", "course_name"],
+      "brightspace": ["orgunitname", "course_name", "org_unit_name"],
+      "generic": ["course_name", "course_title"]
+    },
+    "SCHOOL_ID": {
+      "description": "Owning account / department id (LMS account hierarchy ~ SEATS school). Verify before trusting.",
+      "canvas": ["account_id", "sis_account_id"],
+      "blackboard": ["node_id", "institution_id"],
+      "moodle": ["category_id", "categoryid"],
+      "brightspace": ["department_id"],
+      "generic": ["account_id", "department_id", "school_id"]
+    },
+    "SCHOOL_NAME": {
+      "description": "Owning account / department name (LMS account hierarchy ~ SEATS school). Verify before trusting.",
+      "canvas": ["account_name", "account"],
+      "blackboard": ["node_name", "institution_name"],
+      "moodle": ["category", "category_name"],
+      "brightspace": ["department_name"],
+      "generic": ["account_name", "department_name", "school_name"]
+    }
+  },
+
+  "value_mappings": {},
+
+  "notes": {
+    "not_mapped_on_purpose": "MODULE_ID/MODULE_NAME and VISAREQUIRED are intentionally NOT mapped from LMS data: a Canvas 'section' is a class section, not a SEATS module, and Tier-4 visa status is not an LMS concept. These stay blank and are surfaced in the residual report rather than guessed.",
+    "combined_name_columns": "A single combined name column (e.g. Canvas Gradebook 'Student' as 'Last, First') is NOT auto-split; export a users.csv with separate first_name/last_name for best results."
+  },
+
+  "auto_detection_rules": {
+    "canvas_indicators": ["sis_user_id", "sis_login_id", "canvas_user_id", "sortable_name", "sis_course_id", "account_id", "sis_section_id"],
+    "blackboard_indicators": ["external_course_key", "pk1", "node_id"],
+    "moodle_indicators": ["idnumber", "course_shortname", "course_fullname"],
+    "brightspace_indicators": ["orgdefinedid", "orgunitid", "org_unit_id"]
+  }
+}

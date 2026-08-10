@@ -109,6 +109,31 @@ def test_issues_to_dataframe_empty_and_nonempty():
     assert len(df) == 1 and df["column"].iloc[0] == "X"
 
 
+def test_canvas_lms_export_maps_to_student():
+    # A Canvas (LMS) roster/enrollment export — different vocabulary from an SIS.
+    raw = pd.DataFrame([{
+        "sis_user_id": "U100", "first_name": "Grace", "last_name": "Hopper",
+        "sis_login_id": "ghopper", "email": "g@uni.edu",
+        "course_id": "CS101", "long_name": "Intro CS",
+    }])
+    result = auto_clean(raw, "Student")
+    cd = result.cleaned_df
+
+    def val(col):
+        return str(cd[col].iloc[0]).strip().lower()
+
+    assert val("STUDENT_ID") == "u100"
+    assert val("STUDENT_FORENAME") == "grace"
+    assert val("STUDENT_LAST_NAME") == "hopper"
+    assert val("STUDENT_LOGIN_ID") == "ghopper"
+    assert val("COURSE_ID") == "cs101"
+    assert val("COURSE_NAME") == "intro cs"
+    # Best-effort: MODULE/SCHOOL aren't derivable from Canvas -> flagged, not guessed.
+    assert result.importable is False
+    assert any(i["column"] == "MODULE_NAME" and i["severity"] == "error"
+               for i in result.residual_issues)
+
+
 def test_timetable_type_runs_and_shapes():
     tt_fields = get_ordered_fields(load_spec_by_type("StudentTimetable"))
     raw = pd.DataFrame([{"EVENT_ID": "E1", "DAY": "2026-01-05", "JUNK": "x"}])
